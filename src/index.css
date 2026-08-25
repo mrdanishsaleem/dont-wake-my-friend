@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+
+/* ─── Design tokens ─────────────────────────────────────── */
+:root {
+  --bg-void:       #06080d;
+  --bg-deep:       #0b0f1a;
+  --bg-surface:    #111827;
+  --bg-panel:      #161e2e;
+  --bg-card:       #1c2538;
+
+  --border-dim:    #1f2d45;
+  --border-glow:   #2d4a7a;
+
+  --text-primary:  #e2e8f0;
+  --text-muted:    #6b7fa3;
+  --text-accent:   #7dd3fc;
+  --text-dim:      #3d5070;
+
+  --accent-blue:   #3b82f6;
+  --accent-teal:   #14b8a6;
+  --accent-indigo: #6366f1;
+
+  --canvas-w: 960px;
+  --canvas-h: 540px;
+}
+
+/* ─── Reset ─────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--bg-void);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* ─── Layout ─────────────────────────────────────────────── */
+.app-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 0%, #0d1a2e 0%, transparent 70%),
+    var(--bg-void);
+}
+
+/* ─── Header ─────────────────────────────────────────────── */
+.game-title {
+  font-family: 'Space Mono', monospace;
+  font-weight: 700;
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-accent);
+  text-shadow:
+    0 0 20px rgba(125, 211, 252, 0.25),
+    0 0 60px rgba(59, 130, 246, 0.12);
+  margin-bottom: 0.4rem;
+  text-align: center;
+}
+
+.game-subtitle {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+/* ─── Canvas container ───────────────────────────────────── */
+.canvas-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: var(--canvas-w);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(45, 74, 122, 0.3),
+    0 4px 40px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255,255,255,0.03);
+  background: var(--bg-void);
+  /* Keep 16:9 aspect ratio */
+  aspect-ratio: 16 / 9;
+}
+
+.canvas-wrapper canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* Canvas corner accents */
+.canvas-wrapper::before,
+.canvas-wrapper::after {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: var(--accent-blue);
+  border-style: solid;
+  opacity: 0.5;
+  z-index: 10;
+  pointer-events: none;
+}
+.canvas-wrapper::before {
+  top: 8px; left: 8px;
+  border-width: 1px 0 0 1px;
+  border-radius: 2px 0 0 0;
+}
+.canvas-wrapper::after {
+  bottom: 8px; right: 8px;
+  border-width: 0 1px 1px 0;
+  border-radius: 0 0 2px 0;
+}
+
+/* ─── Info row below canvas ──────────────────────────────── */
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  max-width: var(--canvas-w);
+  margin-top: 0.9rem;
+}
+
+/* ─── Panel shared style ─────────────────────────────────── */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+  padding: 0.8rem 1.1rem;
+}
+
+.panel-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 0.35rem;
+}
+
+.panel-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ─── Objective panel ────────────────────────────────────── */
+.objective-panel {
+  flex: 1;
+}
+
+.objective-panel .panel-value {
+  color: var(--text-accent);
+}
+
+/* ─── Controls panel ─────────────────────────────────────── */
+.controls-panel {
+  text-align: right;
+}
+
+.controls-panel .panel-value {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.key-badge {
+  display: inline-block;
+  background: var(--bg-card);
+  border: 1px solid var(--border-glow);
+  border-radius: 4px;
+  padding: 0.05em 0.4em;
+  font-size: 0.68rem;
+  color: var(--text-accent);
+  margin: 0 1px;
+  font-family: 'Space Mono', monospace;
+}
+
+/* ─── Subtle pulse on the title ──────────────────────────── */
+@keyframes titlePulse {
+  0%, 100% { text-shadow: 0 0 20px rgba(125,211,252,0.25), 0 0 60px rgba(59,130,246,0.12); }
+  50%       { text-shadow: 0 0 30px rgba(125,211,252,0.40), 0 0 80px rgba(59,130,246,0.22); }
+}
+.game-title {
+  animation: titlePulse 4s ease-in-out infinite;
+}
