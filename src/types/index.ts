@@ -95,7 +95,34 @@ export interface InputState {
   right: boolean;
 }
 
-// ─── Animation helpers ───────────────────────────────────────────────────────
+// ─── Noise & Wake System Types ───────────────────────────────────────────────
+
+export type NoiseSource = 'walking' | 'running' | 'interaction' | 'environment';
+
+export interface NoiseEvent {
+  amount: number;
+  position: Vec2;
+  timestamp: number;
+  source: NoiseSource;
+}
+
+export type FriendState =
+  | 'DEEP_SLEEP'
+  | 'LIGHT_SLEEP'
+  | 'RESTLESS'
+  | 'ALMOST_AWAKE'
+  | 'AWAKE';
+
+export interface WakeData {
+  wakeLevel: number; // 0–100
+  friendState: FriendState;
+  maxWakeLevel: number;
+  totalNoiseGenerated: number;
+  currentNoiseRate: number;
+  isGameOver: boolean;
+}
+
+// ─── Animation & Render helpers ──────────────────────────────────────────────
 
 /** State threaded through every render call so sub-renderers can animate. */
 export interface RenderState {
@@ -103,6 +130,8 @@ export interface RenderState {
   timestamp: number;
   /** The player's current state (position, facing, moving flag). */
   player: PlayerState;
+  /** Current wake & stealth state. */
+  wake: WakeData;
 }
 
 // ─── Canvas resolution ───────────────────────────────────────────────────────

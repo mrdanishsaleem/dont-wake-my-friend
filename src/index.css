@@ -52,7 +52,7 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
+  padding: 1.5rem 1rem;
   background:
     radial-gradient(ellipse 60% 40% at 50% 0%, #0d1a2e 0%, transparent 70%),
     var(--bg-void);
@@ -69,7 +69,7 @@ body {
   text-shadow:
     0 0 20px rgba(125, 211, 252, 0.25),
     0 0 60px rgba(59, 130, 246, 0.12);
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.3rem;
   text-align: center;
 }
 
@@ -79,7 +79,7 @@ body {
   letter-spacing: 0.35em;
   text-transform: uppercase;
   color: var(--text-dim);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.2rem;
   text-align: center;
 }
 
@@ -133,13 +133,18 @@ body {
 
 /* ─── Info row below canvas ──────────────────────────────── */
 .info-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 0.85rem;
   width: 100%;
   max-width: var(--canvas-w);
-  margin-top: 0.9rem;
+  margin-top: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .info-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ─── Panel shared style ─────────────────────────────────── */
@@ -148,6 +153,7 @@ body {
   border: 1px solid var(--border-dim);
   border-radius: 8px;
   padding: 0.8rem 1.1rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .panel-label {
@@ -167,16 +173,49 @@ body {
 
 /* ─── Objective panel ────────────────────────────────────── */
 .objective-panel {
-  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .objective-panel .panel-value {
   color: var(--text-accent);
 }
 
+/* ─── Wake Panel styling & warning states ────────────────── */
+.wake-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.wake-panel-warning {
+  border-color: rgba(251, 191, 36, 0.4);
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.08);
+}
+
+.wake-panel-danger {
+  border-color: rgba(249, 115, 22, 0.5);
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.15);
+}
+
+.wake-panel-critical {
+  border-color: rgba(239, 68, 68, 0.7);
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.25);
+  animation: panelPulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes panelPulse {
+  0% { border-color: rgba(239, 68, 68, 0.5); }
+  100% { border-color: rgba(239, 68, 68, 0.9); box-shadow: 0 0 30px rgba(239, 68, 68, 0.35); }
+}
+
 /* ─── Controls panel ─────────────────────────────────────── */
 .controls-panel {
   text-align: right;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .controls-panel .panel-value {

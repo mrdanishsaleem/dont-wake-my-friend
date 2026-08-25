@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { Game } from '../game/Game';
 import { useGameStore } from '../store/gameStore';
 import { useKeyboard } from './useKeyboard';
@@ -6,13 +6,6 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../types';
 
 /**
  * useGame — mounts and owns the Game instance for the lifetime of GameCanvas.
- *
- * Wires:
- *  - A canvas ref → 2D context → Game constructor
- *  - The keyboard InputState ref → Game constructor (read each frame)
- *  - Zustand isRunning flag
- *
- * Returns a ref to attach to the <canvas> element.
  */
 export function useGame() {
   const canvasRef  = useRef<HTMLCanvasElement>(null);
@@ -21,6 +14,10 @@ export function useGame() {
 
   // Keyboard state — a ref, not React state, so no re-renders
   const inputRef = useKeyboard();
+
+  const restart = useCallback(() => {
+    gameRef.current?.restart();
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -50,5 +47,5 @@ export function useGame() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setRunning]);
 
-  return canvasRef;
+  return { canvasRef, restart };
 }
