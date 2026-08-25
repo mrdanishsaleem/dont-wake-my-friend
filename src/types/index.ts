@@ -35,10 +35,6 @@ export type RoomObjectKind =
 
 /**
  * A static entity in the room.
- * - `bounds`   — axis-aligned bounding box (used for collision & rendering)
- * - `solid`    — blocks player movement
- * - `interact` — player can interact (future)
- * - `noisy`    — interacting generates noise (future)
  */
 export interface RoomObject {
   id: string;
@@ -47,13 +43,11 @@ export interface RoomObject {
   solid: boolean;
   interact?: boolean;
   noisy?: boolean;
-  /** Arbitrary extra data a renderer may need. */
   meta?: Record<string, unknown>;
 }
 
 /** The full room / world description. */
 export interface Room {
-  /** Logical canvas dimensions the room was designed for. */
   width: number;
   height: number;
   objects: RoomObject[];
@@ -61,38 +55,28 @@ export interface Room {
 
 // ─── Player ──────────────────────────────────────────────────────────────────
 
-/** Cardinal + diagonal directions the player can face / move. */
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
-/** Mutable movement state owned by the Player class. */
 export interface PlayerState {
   x: number;
   y: number;
-  /** Collision box dimensions. */
   w: number;
   h: number;
-  /** Pixels per second. */
   speed: number;
-  /** Current velocity this frame (pixels/sec). Normalised for diagonals. */
   vx: number;
   vy: number;
-  /** Last direction the player was moving — used for sprite orientation. */
   facing: Direction;
-  /** True when any movement key is held. */
   moving: boolean;
 }
 
 // ─── Input ───────────────────────────────────────────────────────────────────
 
-/**
- * Snapshot of which movement actions are currently active.
- * Decoupled from raw key codes so remapping is trivial later.
- */
 export interface InputState {
-  up:    boolean;
-  down:  boolean;
-  left:  boolean;
-  right: boolean;
+  up:       boolean;
+  down:     boolean;
+  left:     boolean;
+  right:    boolean;
+  interact: boolean;
 }
 
 // ─── Noise & Wake System Types ───────────────────────────────────────────────
@@ -122,20 +106,41 @@ export interface WakeData {
   isGameOver: boolean;
 }
 
+// ─── Interaction System Types ────────────────────────────────────────────────
+
+export interface Interactable {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  radius: number;
+  promptText: string;
+  noiseAmount: number;
+  active: boolean;
+  meta?: Record<string, unknown>;
+}
+
+export interface InteractionEffect {
+  id: string;
+  x: number;
+  y: number;
+  startTime: number;
+  duration: number;
+  text?: string;
+}
+
 // ─── Animation & Render helpers ──────────────────────────────────────────────
 
-/** State threaded through every render call so sub-renderers can animate. */
 export interface RenderState {
-  /** Monotonically increasing timestamp from requestAnimationFrame (ms). */
   timestamp: number;
-  /** The player's current state (position, facing, moving flag). */
   player: PlayerState;
-  /** Current wake & stealth state. */
   wake: WakeData;
+  activePrompt?: string | null;
+  nearbyInteractable?: Interactable | null;
+  interactionEffects?: InteractionEffect[];
 }
 
 // ─── Canvas resolution ───────────────────────────────────────────────────────
 
-/** The internal (logical) resolution of the canvas. */
 export const CANVAS_WIDTH  = 960;
 export const CANVAS_HEIGHT = 540;

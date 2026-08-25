@@ -2,22 +2,22 @@ import { useEffect, useRef } from 'react';
 import type { InputState } from '../types';
 
 /**
- * useKeyboard — tracks which movement keys are currently held.
- *
- * Returns a ref to an InputState object that is mutated in-place on every
- * keydown / keyup event. Because it is a ref (not state), it does NOT trigger
- * React re-renders — the game loop reads it directly each frame via
- * `inputRef.current`.
+ * useKeyboard — tracks which movement and action keys are currently active.
  *
  * Supported bindings:
  *   W / ArrowUp    → up
  *   S / ArrowDown  → down
  *   A / ArrowLeft  → left
  *   D / ArrowRight → right
+ *   E              → interact
  */
 export function useKeyboard(): React.RefObject<InputState> {
   const inputRef = useRef<InputState>({
-    up: false, down: false, left: false, right: false,
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    interact: false,
   });
 
   useEffect(() => {
@@ -27,6 +27,7 @@ export function useKeyboard(): React.RefObject<InputState> {
         case 'KeyS':      case 'ArrowDown':  return 'down';
         case 'KeyA':      case 'ArrowLeft':  return 'left';
         case 'KeyD':      case 'ArrowRight': return 'right';
+        case 'KeyE':                         return 'interact';
         default: return null;
       }
     }
@@ -34,8 +35,10 @@ export function useKeyboard(): React.RefObject<InputState> {
     function onKeyDown(e: KeyboardEvent): void {
       const action = toAction(e.code);
       if (action) {
-        // Prevent arrow keys from scrolling the page
-        e.preventDefault();
+        if (action !== 'interact') {
+          // Prevent arrow keys from scrolling the page
+          e.preventDefault();
+        }
         inputRef.current[action] = true;
       }
     }
@@ -47,12 +50,13 @@ export function useKeyboard(): React.RefObject<InputState> {
       }
     }
 
-    // Reset all keys when the window loses focus so we don't get stuck keys
+    // Reset all keys on blur
     function onBlur(): void {
-      inputRef.current.up    = false;
-      inputRef.current.down  = false;
-      inputRef.current.left  = false;
-      inputRef.current.right = false;
+      inputRef.current.up       = false;
+      inputRef.current.down     = false;
+      inputRef.current.left     = false;
+      inputRef.current.right    = false;
+      inputRef.current.interact = false;
     }
 
     window.addEventListener('keydown', onKeyDown);

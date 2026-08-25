@@ -91,7 +91,7 @@ export function drawFurniture(ctx: Ctx, room: Room): void {
       case 'bookshelf':   drawBookshelf(ctx, b);  break;
       case 'decor':
         if (obj.meta?.type === 'plant') drawPlant(ctx, b);
-        if (obj.meta?.type === 'glass') drawGlass(ctx, b);
+        if (obj.meta?.type === 'glass' && !obj.meta?.collected) drawGlass(ctx, b);
         break;
     }
   }

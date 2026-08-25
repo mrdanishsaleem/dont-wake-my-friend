@@ -1,9 +1,14 @@
 import { useState, useCallback } from 'react';
 import { GameCanvas } from './components/GameCanvas';
 import { WakeMeter } from './components/WakeMeter';
+import { useGameStore } from './store/gameStore';
 
 export default function App() {
   const [gameControls, setGameControls] = useState<{ restart: () => void } | null>(null);
+
+  const objective = useGameStore((s) => s.objective);
+  const hasWaterGlass = useGameStore((s) => s.hasWaterGlass);
+  const nearbyPrompt = useGameStore((s) => s.nearbyPrompt);
 
   const handleGameReady = useCallback((controls: { restart: () => void }) => {
     setGameControls(controls);
@@ -30,7 +35,16 @@ export default function App() {
           {/* 1. Objective */}
           <div className="panel objective-panel">
             <p className="panel-label">Objective</p>
-            <p className="panel-value">Get a glass of water.</p>
+            <p className="panel-value flex items-center gap-2">
+              {hasWaterGlass && <span className="text-emerald-400">✓</span>}
+              <span>{objective}</span>
+            </p>
+            {nearbyPrompt && (
+              <p className="mt-1.5 text-xs text-sky-300 font-mono flex items-center gap-1.5 animate-pulse">
+                <span className="key-badge !bg-sky-950 !text-sky-300 !border-sky-500">E</span>
+                <span>{nearbyPrompt}</span>
+              </p>
+            )}
           </div>
 
           {/* 2. Wake Meter */}
@@ -49,8 +63,10 @@ export default function App() {
               <span className="key-badge">←</span>
               <span className="key-badge">↓</span>
               <span className="key-badge">→</span>
+              <span className="text-[0.65rem] text-slate-400 ml-1">Move</span>
               <br />
-              <span className="text-[0.65rem] text-slate-400">Move quietly</span>
+              <span className="key-badge">E</span>
+              <span className="text-[0.65rem] text-sky-300 ml-1">Interact</span>
             </p>
           </div>
 
