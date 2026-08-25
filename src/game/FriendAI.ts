@@ -40,7 +40,7 @@ export class FriendAI {
     }
   }
 
-  update(dt: number, currentFriendState: FriendState, wakeLevel: number, timestamp: number): void {
+  update(dt: number, currentFriendState: FriendState, _wakeLevel: number, timestamp: number): void {
     this.state = currentFriendState;
 
     // ── 1. Breathing Cycle ───────────────────────────────────────────
@@ -111,7 +111,7 @@ export class FriendAI {
     }
   }
 
-  private triggerRandomEvent(timestamp: number): void {
+  private triggerRandomEvent(_timestamp: number): void {
     if (this.state === 'AWAKE') return;
 
     const r = Math.random();
@@ -176,7 +176,7 @@ export class FriendAI {
     }
   }
 
-  private processActiveEvent(progress: number, dt: number): void {
+  private processActiveEvent(progress: number, _dt: number): void {
     const curve = Math.sin(progress * Math.PI); // 0 -> 1 -> 0
 
     switch (this.activeEvent) {

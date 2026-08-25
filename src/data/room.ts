@@ -26,6 +26,8 @@ const H = CANVAS_HEIGHT;  // 540
 export const BEDROOM: Room = {
   width:  W,
   height: H,
+  name: 'Bedroom',
+  floorType: 'carpet',
   objects: [
 
     // ── Walls (used for collision boundary) ───────────────────────────
@@ -146,4 +148,21 @@ export const BEDROOM: Room = {
       meta: { type: 'glass' },
     },
   ],
+};
+
+function makeRoom(name: string, floorType: Room['floorType'], target: string, type: string, x: number, y: number): Room {
+  const room = JSON.parse(JSON.stringify(BEDROOM)) as Room;
+  room.name = name;
+  room.floorType = floorType;
+  room.objects = room.objects.filter((object) => object.id !== 'decor-glass');
+  room.objects.push({ id: target, kind: 'decor', bounds: { x, y, w: 22, h: 22 }, solid: false, interact: true, noisy: true, meta: { type } });
+  return room;
+}
+
+export const ROOMS: Record<string, Room> = {
+  bedroom: BEDROOM,
+  hallway: makeRoom('Hallway', 'wood', 'decor-keys', 'keys', 260, 210),
+  kitchen: makeRoom('Kitchen', 'tile', 'decor-snacks', 'snacks', 160, 160),
+  bathroom: makeRoom('Bathroom', 'tile', 'decor-phone', 'phone', 460, 320),
+  livingRoom: makeRoom('Living Room', 'carpet', 'decor-headphones', 'headphones', 360, 190),
 };

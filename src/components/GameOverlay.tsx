@@ -8,11 +8,11 @@ interface GameOverlayProps {
 
 export function GameOverlay({ controls }: GameOverlayProps) {
   const gameStatus = useGameStore((s) => s.gameStatus);
-  const wakeLevel = useGameStore((s) => s.wakeLevel);
   const maxWakeLevel = useGameStore((s) => s.maxWakeLevel);
   const totalNoiseGenerated = useGameStore((s) => s.totalNoiseGenerated);
   const elapsedTime = useGameStore((s) => s.elapsedTime);
   const missionStats = useGameStore((s) => s.missionStats);
+  const highScores = useGameStore((s) => s.highScores);
 
   if (gameStatus === 'PLAYING' || gameStatus === 'MENU') {
     return null;
@@ -145,7 +145,7 @@ export function GameOverlay({ controls }: GameOverlayProps) {
             MISSION COMPLETE
           </h2>
           <p className="text-slate-300 text-sm mb-4">
-            You got the glass of water without waking your friend!
+            You completed the mission without waking your friend!
           </p>
 
           {/* Stealth Rating Badge */}
@@ -191,6 +191,11 @@ export function GameOverlay({ controls }: GameOverlayProps) {
                 {missionStats?.totalNoiseGenerated ?? Math.round(totalNoiseGenerated)} pts
               </p>
             </div>
+          </div>
+
+          <div className="mb-5 p-3 rounded-lg bg-slate-950/60 border border-sky-500/20 font-mono text-left">
+            <p className="text-[0.65rem] text-sky-300 uppercase tracking-widest mb-2">Best Stealth Run</p>
+            <div className="grid grid-cols-2 gap-1 text-[0.68rem] text-slate-400"><span>Best score: <b className="text-slate-200">{highScores.bestScore}</b></span><span>Lowest wake: <b className="text-slate-200">{highScores.lowestWakeLevel === 100 ? '—' : `${highScores.lowestWakeLevel}%`}</b></span><span>Fastest: <b className="text-slate-200">{highScores.fastestCompletion ? `${highScores.fastestCompletion.toFixed(1)}s` : '—'}</b></span><span>Missions: <b className="text-slate-200">{highScores.missionsCompleted}</b></span></div>
           </div>
 
           <button

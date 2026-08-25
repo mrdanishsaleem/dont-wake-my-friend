@@ -62,6 +62,13 @@ export function drawRoom(ctx: Ctx, room: Room, timestamp: number = 0): void {
   // Soft ambient glows
   drawAmbientGlows(ctx, room, timestamp);
   drawWallCorners(ctx, room.width, room.height);
+  ctx.save();
+  ctx.font = 'bold 11px "Space Mono", monospace';
+  ctx.fillStyle = 'rgba(186, 230, 253, 0.55)';
+  ctx.textAlign = 'right';
+  const floor = room.floorType === 'carpet' ? 'CARPET · QUIET' : room.floorType === 'tile' ? 'TILE · LOUD' : 'WOOD · MEDIUM';
+  ctx.fillText(`${room.name ?? 'Bedroom'} · ${floor}`, room.width - 40, room.height - 36);
+  ctx.restore();
 }
 
 // ── Background (upper wall) ──────────────────────────────────────────────────
@@ -70,7 +77,7 @@ function drawBackground(ctx: Ctx, W: number, H: number): void {
   vertGradFill(ctx, 0, 0, W, H * 0.52, C.wallTop, C.wallMid);
 }
 
-function drawWallDetails(ctx: Ctx, W: number, H: number): void {
+function drawWallDetails(ctx: Ctx, _W: number, _H: number): void {
   // Subtle picture frame on the wall left of the window
   const frameX = 140;
   const frameY = 50;
@@ -309,7 +316,7 @@ function drawDoor(ctx: Ctx, x: number, y: number, w: number, h: number): void {
 
 // ── Soft Ambient Glows (Lamp / Screen) ────────────────────────────────────────
 
-function drawAmbientGlows(ctx: Ctx, room: Room, timestamp: number): void {
+function drawAmbientGlows(ctx: Ctx, room: Room, _timestamp: number): void {
   const nightstand = room.objects.find((o) => o.id === 'nightstand');
   if (nightstand) {
     const lampX = nightstand.bounds.x + nightstand.bounds.w * 0.5;

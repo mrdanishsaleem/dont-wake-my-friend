@@ -92,9 +92,22 @@ export function drawFurniture(ctx: Ctx, room: Room): void {
       case 'decor':
         if (obj.meta?.type === 'plant') drawPlant(ctx, b);
         if (obj.meta?.type === 'glass' && !obj.meta?.collected) drawGlass(ctx, b);
+        if (obj.meta?.type && obj.meta.type !== 'plant' && obj.meta.type !== 'glass' && !obj.meta?.collected) drawMissionItem(ctx, b, String(obj.meta.type));
         break;
     }
   }
+}
+
+function drawMissionItem(ctx: Ctx, b: Rect, type: string): void {
+  const icon: Record<string, string> = { charger: '🔌', headphones: '🎧', snacks: '🍪', phone: '📱', keys: '🔑' };
+  ctx.save();
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+  ctx.fillRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
+  ctx.font = '18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(icon[type] ?? '•', b.x + b.w / 2, b.y + b.h / 2 + 1);
+  ctx.restore();
 }
 
 // ── Rug ───────────────────────────────────────────────────────────────────────

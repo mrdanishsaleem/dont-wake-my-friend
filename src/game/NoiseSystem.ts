@@ -42,6 +42,10 @@ export class NoiseSystem {
     this.config = config;
   }
 
+  setDifficulty(multiplier: number, recoveryMultiplier: number): void {
+    this.config = { ...DEFAULT_NOISE_CONFIG, walkNoiseRate: DEFAULT_NOISE_CONFIG.walkNoiseRate * multiplier, decayRate: DEFAULT_NOISE_CONFIG.decayRate * recoveryMultiplier };
+  }
+
   setFriendPosition(pos: Vec2): void {
     this.friendPos = pos;
   }

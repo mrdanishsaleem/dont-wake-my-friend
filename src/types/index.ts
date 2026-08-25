@@ -33,6 +33,8 @@ export type RoomObjectKind =
   | 'rug'
   | 'decor';
 
+export type FloorType = 'carpet' | 'wood' | 'tile';
+
 /**
  * A static entity in the room.
  */
@@ -50,6 +52,8 @@ export interface RoomObject {
 export interface Room {
   width: number;
   height: number;
+  name?: string;
+  floorType?: FloorType;
   objects: RoomObject[];
 }
 
@@ -77,12 +81,13 @@ export interface InputState {
   left:     boolean;
   right:    boolean;
   interact: boolean;
+  distract: boolean;
   pause:    boolean;
 }
 
 // ─── Noise & Wake System Types ───────────────────────────────────────────────
 
-export type NoiseSource = 'walking' | 'running' | 'interaction' | 'environment';
+export type NoiseSource = 'walking' | 'running' | 'interaction' | 'environment' | 'distraction';
 
 export interface NoiseEvent {
   amount: number;
@@ -160,6 +165,16 @@ export interface MissionStats {
   totalNoiseGenerated: number;
   stealthRating: StealthRating;
   stealthScore: number;
+  distanceBonus?: number;
+}
+
+export type Difficulty = 'EASY' | 'NORMAL' | 'HARD';
+
+export interface HighScores {
+  bestScore: number;
+  lowestWakeLevel: number;
+  fastestCompletion: number;
+  missionsCompleted: number;
 }
 
 export interface Mission {

@@ -1,6 +1,7 @@
-import type { Room, RenderState, InputState, Vec2 } from '../types';
+import type { Room, RenderState, InputState, Vec2, Difficulty, Mission } from '../types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../types';
-import { BEDROOM }             from '../data/room';
+import { BEDROOM, ROOMS }      from '../data/room';
+import { AVAILABLE_MISSIONS }  from '../data/missions';
 import { Player }              from './Player';
 import { NoiseSystem }         from './NoiseSystem';
 import { WakeSystem }          from './WakeSystem';
@@ -38,6 +39,7 @@ export class Game {
   private lastTime:            number  = 0;
   private lastInteractPressed: boolean = false;
   private lastPausePressed:    boolean = false;
+  private lastDistractPressed: boolean = false;
 
   // Screen shake & visual effects
   private shakeIntensity:      number  = 0;
@@ -65,24 +67,36 @@ export class Game {
     this.missionSystem     = new MissionSystem();
 
     this.initInteractables();
+    this.applyDifficulty(useGameStore.getState().difficulty);
   }
 
   private initInteractables(): void {
-    const glass = this.room.objects.find((o) => o.id === 'decor-glass');
-    const glassPos: Vec2 = glass
-      ? { x: glass.bounds.x + glass.bounds.w / 2, y: glass.bounds.y + glass.bounds.h / 2 }
-      : { x: 547, y: 76 };
+    const mission = this.missionSystem.getCurrentMission();
+    if (!mission?.target) return;
+    const target = this.room.objects.find((object) => object.id === mission.target);
+    if (!target) return;
+    const labels: Record<string, string> = { 'decor-glass': 'Glass of Water', 'decor-charger': 'Phone Charger', 'decor-headphones': 'Headphones', 'decor-snacks': 'Snacks', 'decor-phone': 'Alarm Phone', 'decor-keys': 'Keys', 'door-main': 'Bedroom Door' };
+    const risks: Record<string, number> = { 'decor-glass': 10, 'decor-charger': 6, 'decor-headphones': 4, 'decor-snacks': 9, 'decor-phone': 14, 'decor-keys': 16, 'door-main': 12 };
+    this.interactionSystem.register({ id: target.id, name: labels[target.id] ?? 'Mission Item', x: target.bounds.x + target.bounds.w / 2, y: target.bounds.y + target.bounds.h / 2, radius: 65, promptText: `Get ${labels[target.id] ?? 'item'}`, noiseAmount: risks[target.id] ?? 8, active: true });
+  }
 
-    this.interactionSystem.register({
-      id: 'decor-glass',
-      name: 'Glass of Water',
-      x: glassPos.x,
-      y: glassPos.y,
-      radius: 65,
-      promptText: 'Pick up Glass of Water',
-      noiseAmount: 10,
-      active: true,
-    });
+  private applyDifficulty(difficulty: Difficulty): void {
+    const difficultySettings = { EASY: [0.65, 1.5], NORMAL: [1, 1], HARD: [1.45, 0.55] } as const;
+    const floorMultiplier = this.room.floorType === 'carpet' ? 0.5 : this.room.floorType === 'tile' ? 1.55 : 1;
+    const [noise, recovery] = difficultySettings[difficulty];
+    this.noiseSystem.setDifficulty(noise * floorMultiplier, recovery);
+  }
+
+  private setMissionForRun(): void {
+    const mission = AVAILABLE_MISSIONS[Math.floor(Math.random() * AVAILABLE_MISSIONS.length)] as Mission;
+    const roomKey = mission.id === 'mission-snacks' ? 'kitchen' : mission.id === 'mission-alarm' ? 'bathroom' : mission.id === 'mission-keys' ? 'hallway' : mission.id === 'mission-headphones' ? 'livingRoom' : 'bedroom';
+    this.room = JSON.parse(JSON.stringify(ROOMS[roomKey] ?? BEDROOM)) as Room;
+    if (mission.id === 'mission-charger') this.room.objects.push({ id: 'decor-charger', kind: 'decor', bounds: { x: 118 + Math.floor(Math.random() * 70), y: 286, w: 20, h: 18 }, solid: false, interact: true, meta: { type: 'charger' } });
+    // Small safe variation makes routes feel fresh without moving a target into danger.
+    const target = mission.target && this.room.objects.find((item) => item.id === mission.target);
+    if (target && target.id !== 'door-main') target.bounds.x += (Math.floor(Math.random() * 3) - 1) * 28;
+    this.missionSystem.startMission(mission);
+    this.applyDifficulty(useGameStore.getState().difficulty);
   }
 
   // ── Lifecycle & Controls ─────────────────────────────────
@@ -122,11 +136,7 @@ export class Game {
     this.player.state.facing = 'down';
     this.player.state.moving = false;
 
-    const glass = this.room.objects.find((o) => o.id === 'decor-glass');
-    if (glass) {
-      if (!glass.meta) glass.meta = {};
-      glass.meta.collected = false;
-    }
+    this.setMissionForRun();
 
     this.shakeIntensity = 0;
     this.lastWakeTier = 0;
@@ -135,7 +145,6 @@ export class Game {
     this.wakeSystem.reset();
     this.friendAI.reset();
     this.interactionSystem.reset();
-    this.missionSystem.reset();
     this.initInteractables();
 
     useGameStore.getState().resetGame();
@@ -197,6 +206,10 @@ export class Game {
         this.handleInteraction(timestamp);
       }
       this.lastInteractPressed = isInteractHeld;
+
+      const isDistractHeld = this.inputRef.current.distract;
+      if (isDistractHeld && !this.lastDistractPressed) this.throwDistraction(timestamp);
+      this.lastDistractPressed = isDistractHeld;
 
       // Update noise & wake decay
       const wakeDelta = this.noiseSystem.update(dt, this.player.state, timestamp);
@@ -261,7 +274,7 @@ export class Game {
 
     const { item, noise } = result;
 
-    if (item.id === 'decor-glass') {
+    if (item.id === this.missionSystem.getCurrentMission()?.target) {
       // 1. Play sounds & screen shake
       sound.playPickupSound();
       this.shakeIntensity = 5;
@@ -288,21 +301,35 @@ export class Game {
 
       // 4. Complete Mission if friend didn't wake up
       if (!this.wakeSystem.getIsGameOver()) {
+        const playerCenter = { x: this.player.state.x + this.player.state.w / 2, y: this.player.state.y + this.player.state.h / 2 };
         const rawStats = {
           timeTaken: this.missionSystem.getElapsedTime(),
           maxWakeLevel: Math.round(this.wakeSystem.getData().maxWakeLevel),
           totalNoiseGenerated: Math.round(this.noiseSystem.getTotalNoiseGenerated()),
+          distanceBonus: Math.min(10, Math.round(Math.hypot(playerCenter.x - this.friendHeadPos.x, playerCenter.y - this.friendHeadPos.y) / 55)),
         };
 
         this.missionSystem.completeMission(rawStats);
         const mission = this.missionSystem.getCurrentMission();
         if (mission?.stats) {
           store.setMissionStats(mission.stats);
+          store.recordHighScore(mission.stats);
         }
         store.setGameStatus('GAME_COMPLETE');
         sound.playSuccessSound();
       }
     }
+  }
+
+  private throwDistraction(timestamp: number): void {
+    const player = this.player.state;
+    const origin = { x: player.x + player.w / 2, y: player.y + player.h / 2 };
+    const direction = player.facing === 'up' ? [0, -1] : player.facing === 'down' ? [0, 1] : player.facing === 'left' ? [-1, 0] : [1, 0];
+    const landing = { x: Math.max(40, Math.min(CANVAS_WIDTH - 40, origin.x + direction[0] * 170)), y: Math.max(45, Math.min(CANVAS_HEIGHT - 40, origin.y + direction[1] * 170)) };
+    const noise = 11;
+    this.noiseSystem.emitNoise(noise, landing, 'distraction', timestamp);
+    this.wakeSystem.update(noise * this.noiseSystem.getDistanceMultiplier(landing));
+    this.interactionSystem.addEffect(landing.x, landing.y, timestamp, 'DISTRACTION');
   }
 
   // ── Render ───────────────────────────────────────────────

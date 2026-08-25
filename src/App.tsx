@@ -9,6 +9,8 @@ import { useGameStore } from './store/gameStore';
 export default function App() {
   const [gameControls, setGameControls] = useState<GameControls | null>(null);
   const gameStatus = useGameStore((s) => s.gameStatus);
+  const difficulty = useGameStore((s) => s.difficulty);
+  const setDifficulty = useGameStore((s) => s.setDifficulty);
 
   const handleGameReady = useCallback((controls: GameControls) => {
     setGameControls(controls);
@@ -21,6 +23,12 @@ export default function App() {
       <header className="flex flex-col items-center relative w-full max-w-[960px]">
         <h1 className="game-title">Don't Wake My Friend</h1>
         <p className="game-subtitle">stealth · night · bedroom</p>
+        <div className="absolute left-0 top-1 flex items-center gap-1 text-[0.62rem] font-mono text-slate-400">
+          <span>DIFFICULTY</span>
+          {(['EASY', 'NORMAL', 'HARD'] as const).map((level) => (
+            <button key={level} onClick={() => setDifficulty(level)} className={`px-1.5 py-0.5 rounded border ${difficulty === level ? 'border-sky-400 text-sky-300 bg-sky-950/50' : 'border-slate-800 hover:border-slate-600'}`}>{level}</button>
+          ))}
+        </div>
 
         {/* Top-right Pause button */}
         {gameStatus === 'PLAYING' && (
@@ -64,6 +72,8 @@ export default function App() {
               <br />
               <span className="key-badge">E</span>
               <span className="text-[0.65rem] text-sky-300 ml-1 mr-2">Interact</span>
+              <span className="key-badge">F</span>
+              <span className="text-[0.65rem] text-amber-300 ml-1 mr-2">Throw</span>
               <span className="key-badge">ESC</span>
               <span className="text-[0.65rem] text-slate-400 ml-1">Pause</span>
             </p>

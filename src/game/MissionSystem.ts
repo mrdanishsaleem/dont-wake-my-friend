@@ -5,6 +5,7 @@ export function calculateStealthRating(
   maxWakeLevel: number,
   timeTaken: number,
   totalNoise: number,
+  distanceBonus: number = 0,
 ): { score: number; rating: StealthRating } {
   // Score calculation:
   // Baseline 100
@@ -16,7 +17,7 @@ export function calculateStealthRating(
   const noisePenalty = excessNoise * 0.4;
   const timePenalty = Math.max(0, timeTaken - 12) * 0.5;
 
-  const rawScore = 100 - wakePenalty - noisePenalty - timePenalty;
+  const rawScore = 100 - wakePenalty - noisePenalty - timePenalty + distanceBonus;
   const score = Math.max(0, Math.min(100, Math.round(rawScore)));
 
   let rating: StealthRating = 'WALKING DISASTER';
@@ -97,13 +98,14 @@ export class MissionSystem {
   /**
    * Complete the current mission and lock game into GAME_COMPLETE state.
    */
-  completeMission(rawStats: { timeTaken: number; maxWakeLevel: number; totalNoiseGenerated: number }): void {
+  completeMission(rawStats: { timeTaken: number; maxWakeLevel: number; totalNoiseGenerated: number; distanceBonus?: number }): void {
     if (!this.currentMission || this.gameStatus !== 'PLAYING') return;
 
     const { score, rating } = calculateStealthRating(
       rawStats.maxWakeLevel,
       rawStats.timeTaken,
       rawStats.totalNoiseGenerated,
+      rawStats.distanceBonus,
     );
 
     const stats: MissionStats = {

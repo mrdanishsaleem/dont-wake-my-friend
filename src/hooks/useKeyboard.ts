@@ -10,6 +10,7 @@ import type { InputState } from '../types';
  *   A / ArrowLeft  → left
  *   D / ArrowRight → right
  *   E              → interact
+ *   F              → throw a distraction
  *   Escape         → pause
  */
 export function useKeyboard(): React.RefObject<InputState> {
@@ -19,6 +20,7 @@ export function useKeyboard(): React.RefObject<InputState> {
     left: false,
     right: false,
     interact: false,
+    distract: false,
     pause: false,
   });
 
@@ -30,6 +32,7 @@ export function useKeyboard(): React.RefObject<InputState> {
         case 'KeyA':      case 'ArrowLeft':  return 'left';
         case 'KeyD':      case 'ArrowRight': return 'right';
         case 'KeyE':                         return 'interact';
+        case 'KeyF':                         return 'distract';
         case 'Escape':                       return 'pause';
         default: return null;
       }
@@ -38,7 +41,7 @@ export function useKeyboard(): React.RefObject<InputState> {
     function onKeyDown(e: KeyboardEvent): void {
       const action = toAction(e.code);
       if (action) {
-        if (action !== 'interact' && action !== 'pause') {
+        if (action !== 'interact' && action !== 'distract' && action !== 'pause') {
           e.preventDefault();
         }
         inputRef.current[action] = true;
@@ -58,7 +61,8 @@ export function useKeyboard(): React.RefObject<InputState> {
       inputRef.current.down     = false;
       inputRef.current.left     = false;
       inputRef.current.right    = false;
-      inputRef.current.interact = false;
+    inputRef.current.interact = false;
+      inputRef.current.distract = false;
       inputRef.current.pause    = false;
     }
 

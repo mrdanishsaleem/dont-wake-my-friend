@@ -263,7 +263,6 @@ function drawMumbleBubble(ctx: Ctx, x: number, y: number, text: string, alpha: n
 
   const textWidth = ctx.measureText(text).width;
   const padX = 6;
-  const padY = 3;
   const boxW = textWidth + padX * 2;
   const boxH = 16;
   const boxX = x - boxW / 2;

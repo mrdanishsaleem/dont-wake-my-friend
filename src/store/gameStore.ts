@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { FriendState, WakeData, Mission, GameStatus, MissionStats } from '../types';
+import type { FriendState, WakeData, Mission, GameStatus, MissionStats, Difficulty, HighScores } from '../types';
 import { INITIAL_MISSION } from '../data/missions';
 
 /**
@@ -24,6 +24,8 @@ interface GameState {
   nearbyPrompt: string | null;
   elapsedTime: number;
   missionStats: MissionStats | null;
+  difficulty: Difficulty;
+  highScores: HighScores;
 
   // Actions
   setRunning: (running: boolean) => void;
@@ -34,7 +36,16 @@ interface GameState {
   setNearbyPrompt: (prompt: string | null) => void;
   setElapsedTime: (time: number) => void;
   setMissionStats: (stats: MissionStats | null) => void;
+  setDifficulty: (difficulty: Difficulty) => void;
+  recordHighScore: (stats: MissionStats) => void;
   resetGame: () => void;
+}
+
+const HIGH_SCORE_KEY = 'dont-wake-my-friend-high-scores';
+const defaultScores: HighScores = { bestScore: 0, lowestWakeLevel: 100, fastestCompletion: 0, missionsCompleted: 0 };
+function loadHighScores(): HighScores {
+  try { return { ...defaultScores, ...JSON.parse(localStorage.getItem(HIGH_SCORE_KEY) ?? '{}') }; }
+  catch { return defaultScores; }
 }
 
 export const useGameStore = create<GameState>((set) => ({
@@ -53,6 +64,8 @@ export const useGameStore = create<GameState>((set) => ({
   nearbyPrompt: null,
   elapsedTime: 0,
   missionStats: null,
+  difficulty: 'NORMAL',
+  highScores: typeof window === 'undefined' ? defaultScores : loadHighScores(),
 
   setRunning: (running) => set({ isRunning: running }),
   setGameStatus: (status) => set({ gameStatus: status }),
@@ -72,6 +85,17 @@ export const useGameStore = create<GameState>((set) => ({
   setNearbyPrompt: (prompt) => set({ nearbyPrompt: prompt }),
   setElapsedTime: (time) => set({ elapsedTime: time }),
   setMissionStats: (stats) => set({ missionStats: stats }),
+  setDifficulty: (difficulty) => set({ difficulty }),
+  recordHighScore: (stats) => set((state) => {
+    const highScores: HighScores = {
+      bestScore: Math.max(state.highScores.bestScore, stats.stealthScore),
+      lowestWakeLevel: Math.min(state.highScores.lowestWakeLevel, stats.maxWakeLevel),
+      fastestCompletion: state.highScores.fastestCompletion === 0 ? stats.timeTaken : Math.min(state.highScores.fastestCompletion, stats.timeTaken),
+      missionsCompleted: state.highScores.missionsCompleted + 1,
+    };
+    try { localStorage.setItem(HIGH_SCORE_KEY, JSON.stringify(highScores)); } catch { /* storage is optional */ }
+    return { highScores };
+  }),
 
   resetGame: () =>
     set({

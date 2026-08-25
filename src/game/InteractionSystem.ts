@@ -38,6 +38,10 @@ export class InteractionSystem {
     return this.effects;
   }
 
+  addEffect(x: number, y: number, timestamp: number, text: string): void {
+    this.effects.push({ id: `effect-${timestamp}-${text}`, x, y, startTime: timestamp, duration: 1200, text });
+  }
+
   /**
    * Check proximity of player to active interactables.
    */
