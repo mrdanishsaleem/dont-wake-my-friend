@@ -1,10 +1,11 @@
-import type { Room, RenderState, InputState, Vec2 } from '../types';
+import type { Room, RenderState, InputState, Vec2, MissionStats } from '../types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../types';
 import { BEDROOM }             from '../data/room';
 import { Player }              from './Player';
 import { NoiseSystem }         from './NoiseSystem';
 import { WakeSystem }          from './WakeSystem';
 import { InteractionSystem }   from './InteractionSystem';
+import { MissionSystem }       from './MissionSystem';
 import { sound }               from './AudioSystem';
 import { drawRoom }            from './renderer/drawRoom';
 import { drawFurniture }       from './renderer/drawFurniture';
@@ -18,7 +19,7 @@ import { useGameStore }        from '../store/gameStore';
 export const DEBUG_COLLISION = false;
 
 /**
- * Game — owns the canvas rendering loop, physics, noise, wake, and interaction systems.
+ * Game — owns the canvas rendering loop, physics, stealth, and mission systems.
  */
 export class Game {
   private ctx:                CanvasRenderingContext2D;
@@ -27,6 +28,7 @@ export class Game {
   private noiseSystem:        NoiseSystem;
   private wakeSystem:         WakeSystem;
   private interactionSystem:  InteractionSystem;
+  private missionSystem:      MissionSystem;
   private inputRef:           { current: InputState };
   private rafId:              number  = 0;
   private running:            boolean = false;
@@ -38,13 +40,13 @@ export class Game {
     inputRef: { current: InputState },
   ) {
     this.ctx      = ctx;
-    this.room     = JSON.parse(JSON.stringify(BEDROOM)) as Room; // Deep clone so state mutation doesn't taint template
+    this.room     = JSON.parse(JSON.stringify(BEDROOM)) as Room;
     this.inputRef = inputRef;
 
     // Spawn near bottom-left — open floor area, away from furniture
     this.player = new Player(100, 420);
 
-    // Calculate sleeping friend's head position (near headboard of bed)
+    // Calculate sleeping friend's head position
     const bed = this.room.objects.find((o) => o.id === 'bed-main');
     const friendHeadPos: Vec2 = bed
       ? { x: bed.bounds.x + bed.bounds.w - 40, y: bed.bounds.y + bed.bounds.h * 0.36 }
@@ -53,12 +55,12 @@ export class Game {
     this.noiseSystem       = new NoiseSystem(friendHeadPos);
     this.wakeSystem        = new WakeSystem(0);
     this.interactionSystem = new InteractionSystem();
+    this.missionSystem      = new MissionSystem();
 
     this.initInteractables();
   }
 
   private initInteractables(): void {
-    // Locate the water glass
     const glass = this.room.objects.find((o) => o.id === 'decor-glass');
     const glassPos: Vec2 = glass
       ? { x: glass.bounds.x + glass.bounds.w / 2, y: glass.bounds.y + glass.bounds.h / 2 }
@@ -98,7 +100,7 @@ export class Game {
     this.player.state.facing = 'down';
     this.player.state.moving = false;
 
-    // Reset room items (uncollect glass)
+    // Reset room items
     const glass = this.room.objects.find((o) => o.id === 'decor-glass');
     if (glass) {
       if (!glass.meta) glass.meta = {};
@@ -108,6 +110,7 @@ export class Game {
     this.noiseSystem.reset();
     this.wakeSystem.reset();
     this.interactionSystem.reset();
+    this.missionSystem.reset();
     this.initInteractables();
 
     useGameStore.getState().resetGame();
@@ -118,7 +121,7 @@ export class Game {
   private loop = (timestamp: number): void => {
     if (!this.running) return;
 
-    const dt = (timestamp - this.lastTime) / 1000; // seconds
+    const dt = (timestamp - this.lastTime) / 1000;
     this.lastTime = timestamp;
 
     this.update(dt, timestamp);
@@ -130,10 +133,11 @@ export class Game {
   // ── Update ───────────────────────────────────────────────
 
   private update(dt: number, timestamp: number): void {
+    const gameStatus = this.missionSystem.getGameStatus();
     const isGameOver = this.wakeSystem.getIsGameOver();
 
-    // 1. If not game over, update player movement
-    if (!isGameOver) {
+    // 1. If actively playing, process gameplay systems
+    if (gameStatus === 'PLAYING') {
       this.player.update(dt, this.inputRef.current, this.room);
 
       const playerCenter: Vec2 = {
@@ -141,30 +145,40 @@ export class Game {
         y: this.player.state.y + this.player.state.h / 2,
       };
 
-      // 2. Update interaction detection
       this.interactionSystem.update(dt, playerCenter, timestamp);
 
-      // 3. Handle interaction input (E key rising edge)
+      // Handle interaction input
       const isInteractHeld = this.inputRef.current.interact;
       if (isInteractHeld && !this.lastInteractPressed) {
         this.handleInteraction(timestamp);
       }
       this.lastInteractPressed = isInteractHeld;
+
+      // Update noise & wake decay
+      const wakeDelta = this.noiseSystem.update(dt, this.player.state, timestamp);
+      this.wakeSystem.update(wakeDelta);
+
+      // Check mission failure on wake limit
+      const currentStats = {
+        maxWakeLevel: this.wakeSystem.getData().maxWakeLevel,
+        totalNoiseGenerated: this.noiseSystem.getTotalNoiseGenerated(),
+      };
+      this.missionSystem.update(dt, this.wakeSystem.getIsGameOver(), currentStats);
     }
 
-    // 4. Calculate continuous noise delta and update wake system
-    const wakeDelta = this.noiseSystem.update(dt, this.player.state, timestamp);
-    this.wakeSystem.update(wakeDelta);
-
-    // 5. Sync with Zustand store for React UI
+    // 2. Sync with Zustand store for React UI
     const wakeData = this.wakeSystem.getData(
       this.noiseSystem.getCurrentNoiseRate(),
       this.noiseSystem.getTotalNoiseGenerated(),
     );
     const nearby = this.interactionSystem.getNearby();
+    const currentMission = this.missionSystem.getCurrentMission();
 
     const store = useGameStore.getState();
     store.setWakeData(wakeData);
+    store.setGameStatus(this.missionSystem.getGameStatus());
+    store.setCurrentMission(currentMission);
+    store.setElapsedTime(this.missionSystem.getElapsedTime());
     store.setNearbyPrompt(nearby ? nearby.promptText : null);
   }
 
@@ -175,10 +189,10 @@ export class Game {
     const { item, noise } = result;
 
     if (item.id === 'decor-glass') {
-      // 1. Play sound
+      // 1. Play sounds
       sound.playPickupSound();
 
-      // 2. Generate discrete noise event and apply distance-based attenuation
+      // 2. Generate noise
       const itemPos: Vec2 = { x: item.x, y: item.y };
       this.noiseSystem.emitNoise(noise, itemPos, 'interaction', timestamp);
 
@@ -195,10 +209,22 @@ export class Game {
         roomGlass.meta.collected = true;
       }
 
-      // 4. Update UI objective & inventory
       const store = useGameStore.getState();
       store.setHasWaterGlass(true);
-      store.setObjective('Glass collected! Escape quietly.');
+
+      // 4. Complete Mission if friend didn't wake up
+      if (!this.wakeSystem.getIsGameOver()) {
+        const stats: MissionStats = {
+          timeTaken: this.missionSystem.getElapsedTime(),
+          maxWakeLevel: Math.round(this.wakeSystem.getData().maxWakeLevel),
+          totalNoiseGenerated: Math.round(this.noiseSystem.getTotalNoiseGenerated()),
+        };
+
+        this.missionSystem.completeMission(stats);
+        store.setMissionStats(stats);
+        store.setGameStatus('GAME_COMPLETE');
+        sound.playSuccessSound();
+      }
     }
   }
 
@@ -216,6 +242,7 @@ export class Game {
 
     const nearbyInteractable = this.interactionSystem.getNearby();
     const interactionEffects = this.interactionSystem.getEffects();
+    const gameStatus = this.missionSystem.getGameStatus();
 
     const state: RenderState = {
       timestamp,
@@ -223,9 +250,11 @@ export class Game {
       wake: wakeData,
       nearbyInteractable,
       interactionEffects,
+      gameStatus,
+      currentMission: this.missionSystem.getCurrentMission(),
     };
 
-    // 1. Base scene: room → furniture → friend → player
+    // 1. Base scene
     drawRoom(ctx, room);
     drawFurniture(ctx, room);
     drawFriend(ctx, room, state);
@@ -234,11 +263,13 @@ export class Game {
     // 2. Interaction prompts & effects
     drawInteraction(ctx, state);
 
-    // 3. Danger & alert visual effects
+    // 3. Danger alerts
     this.drawDangerEffects(ctx, wakeData.wakeLevel, timestamp);
 
-    // 4. Game Over overlay if awake
-    if (wakeData.isGameOver) {
+    // 4. Game Complete or Game Over banner overlays
+    if (gameStatus === 'GAME_COMPLETE') {
+      this.drawGameCompleteOverlay(ctx, timestamp);
+    } else if (wakeData.isGameOver || gameStatus === 'GAME_OVER') {
       this.drawGameOverOverlay(ctx, timestamp);
     }
 
@@ -272,10 +303,55 @@ export class Game {
     ctx.restore();
   }
 
+  private drawGameCompleteOverlay(ctx: CanvasRenderingContext2D, timestamp: number): void {
+    ctx.save();
+
+    // Dark teal semi-transparent tint
+    ctx.fillStyle = 'rgba(6, 15, 25, 0.75)';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    const pulse = 1 + Math.sin(timestamp * 0.005) * 0.02;
+    const cx = CANVAS_WIDTH / 2;
+    const cy = CANVAS_HEIGHT / 2;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(pulse, pulse);
+
+    ctx.shadowColor = 'rgba(56, 189, 248, 0.8)';
+    ctx.shadowBlur = 20;
+
+    ctx.font = 'bold 34px "Space Mono", monospace';
+    ctx.fillStyle = '#38bdf8';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('MISSION COMPLETE!', 0, -35);
+
+    ctx.font = '500 15px "Inter", system-ui, sans-serif';
+    ctx.fillStyle = '#cbd5e1';
+    ctx.shadowBlur = 0;
+    ctx.fillText('You got the glass of water without waking your friend.', 0, 5);
+
+    // Subtle stats summary
+    const stats = this.missionSystem.getCurrentMission()?.stats;
+    if (stats) {
+      ctx.font = '12px "Space Mono", monospace';
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(
+        `TIME: ${stats.timeTaken.toFixed(1)}s  |  MAX WAKE: ${stats.maxWakeLevel}%  |  TOTAL NOISE: ${stats.totalNoiseGenerated}`,
+        0,
+        38,
+      );
+    }
+
+    ctx.restore();
+    ctx.restore();
+  }
+
   private drawGameOverOverlay(ctx: CanvasRenderingContext2D, timestamp: number): void {
     ctx.save();
 
-    ctx.fillStyle = 'rgba(10, 8, 18, 0.72)';
+    ctx.fillStyle = 'rgba(10, 8, 18, 0.75)';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     const pulse = 1 + Math.sin(timestamp * 0.006) * 0.03;

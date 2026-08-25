@@ -97,6 +97,39 @@ export class AudioSystem {
       // Ignore audio error
     }
   }
+
+  /**
+   * Ascending gentle 3-note melody when completing a mission.
+   */
+  playSuccessSound(): void {
+    if (this.isMuted) return;
+    const ctx = this.initContext();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const noteStart = now + i * 0.1;
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, noteStart);
+
+        gain.gain.setValueAtTime(0.12, noteStart);
+        gain.gain.exponentialRampToValueAtTime(0.001, noteStart + 0.35);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(noteStart);
+        osc.stop(noteStart + 0.4);
+      });
+    } catch {
+      // Ignore audio error
+    }
+  }
 }
 
 export const sound = new AudioSystem();

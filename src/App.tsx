@@ -1,14 +1,10 @@
 import { useState, useCallback } from 'react';
 import { GameCanvas } from './components/GameCanvas';
+import { ObjectivePanel } from './components/ObjectivePanel';
 import { WakeMeter } from './components/WakeMeter';
-import { useGameStore } from './store/gameStore';
 
 export default function App() {
   const [gameControls, setGameControls] = useState<{ restart: () => void } | null>(null);
-
-  const objective = useGameStore((s) => s.objective);
-  const hasWaterGlass = useGameStore((s) => s.hasWaterGlass);
-  const nearbyPrompt = useGameStore((s) => s.nearbyPrompt);
 
   const handleGameReady = useCallback((controls: { restart: () => void }) => {
     setGameControls(controls);
@@ -32,20 +28,8 @@ export default function App() {
         {/* ── Info row ─────────────────────────────────────── */}
         <div className="info-row">
 
-          {/* 1. Objective */}
-          <div className="panel objective-panel">
-            <p className="panel-label">Objective</p>
-            <p className="panel-value flex items-center gap-2">
-              {hasWaterGlass && <span className="text-emerald-400">✓</span>}
-              <span>{objective}</span>
-            </p>
-            {nearbyPrompt && (
-              <p className="mt-1.5 text-xs text-sky-300 font-mono flex items-center gap-1.5 animate-pulse">
-                <span className="key-badge !bg-sky-950 !text-sky-300 !border-sky-500">E</span>
-                <span>{nearbyPrompt}</span>
-              </p>
-            )}
-          </div>
+          {/* 1. Objective & Mission */}
+          <ObjectivePanel onRestart={gameControls?.restart} />
 
           {/* 2. Wake Meter */}
           <WakeMeter onRestart={gameControls?.restart} />

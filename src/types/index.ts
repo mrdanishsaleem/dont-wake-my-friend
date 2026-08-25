@@ -129,6 +129,28 @@ export interface InteractionEffect {
   text?: string;
 }
 
+// ─── Mission System Types ────────────────────────────────────────────────────
+
+export type MissionStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+
+export type GameStatus = 'PLAYING' | 'GAME_COMPLETE' | 'GAME_OVER';
+
+export interface MissionStats {
+  timeTaken: number; // in seconds
+  maxWakeLevel: number;
+  totalNoiseGenerated: number;
+}
+
+export interface Mission {
+  id: string;
+  title: string;
+  description: string;
+  status: MissionStatus;
+  target?: string;
+  icon?: string;
+  stats?: MissionStats;
+}
+
 // ─── Animation & Render helpers ──────────────────────────────────────────────
 
 export interface RenderState {
@@ -138,6 +160,8 @@ export interface RenderState {
   activePrompt?: string | null;
   nearbyInteractable?: Interactable | null;
   interactionEffects?: InteractionEffect[];
+  gameStatus?: GameStatus;
+  currentMission?: Mission | null;
 }
 
 // ─── Canvas resolution ───────────────────────────────────────────────────────
