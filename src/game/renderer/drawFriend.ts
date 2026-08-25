@@ -1,13 +1,13 @@
 /**
- * drawFriend — renders the sleeping (or waking) friend on the bed with state-driven reactions and Zzz animation.
+ * drawFriend — renders the sleeping (or waking) friend on the bed with dynamic AI poses,
+ * breathing animations, expressions, speech mumbles, and Zzz cycles.
  */
 
-import type { Room, RenderState, FriendState } from '../../types';
+import type { Room, RenderState, FriendState, FriendAIState } from '../../types';
 import { fillRoundRect } from './drawPrimitives';
 
 type Ctx = CanvasRenderingContext2D;
 
-// ── Palette ───────────────────────────────────────────────────────────────────
 const C = {
   body:       '#2c3a50',
   bodyDark:   '#1e2a3c',
@@ -18,38 +18,46 @@ const C = {
   sweat:      '#7dd3fc',
 };
 
-// ZZZ config
-const ZZZ_COUNT  = 3;
-const ZZZ_CYCLE  = 3200;  // ms for a full cycle of all Zs
+const ZZZ_COUNT = 3;
+const ZZZ_CYCLE = 3200;
 
-export function drawFriend(ctx: Ctx, room: Room, state: RenderState): void {
+export function drawFriend(ctx: Ctx, room: Room, renderState: RenderState): void {
   const bed = room.objects.find((o) => o.id === 'bed-main');
   if (!bed) return;
 
   const b = bed.bounds;
-  const friendState: FriendState = state.wake.friendState;
+  const ai: FriendAIState | undefined = renderState.friendAI;
+  const friendState: FriendState = ai?.state ?? renderState.wake.friendState;
+
   const isAwake = friendState === 'AWAKE';
   const isAlmostAwake = friendState === 'ALMOST_AWAKE';
   const isRestless = friendState === 'RESTLESS';
 
-  // Jitter calculation based on restlessness
+  // Breathing & Jitter offsets
+  const breathOffset = ai?.breathingOffset ?? Math.sin(renderState.timestamp * 0.002) * 1.2;
+  const headOffX = ai?.headOffset.x ?? 0;
+  const headOffY = ai?.headOffset.y ?? 0;
+  const bodyOffY = ai?.bodyOffset.y ?? 0;
+  const sitUpProgress = ai?.sitUpProgress ?? (isAwake ? 1 : 0);
+  const facingAngle = ai?.facingAngle ?? 0;
+
   let jitterX = 0;
   let jitterY = 0;
   if (isAlmostAwake) {
-    jitterX = Math.sin(state.timestamp * 0.035) * 2.2;
-    jitterY = Math.cos(state.timestamp * 0.045) * 1.8;
+    jitterX = Math.sin(renderState.timestamp * 0.035) * 1.8;
+    jitterY = Math.cos(renderState.timestamp * 0.045) * 1.4;
   } else if (isRestless) {
-    jitterX = Math.sin(state.timestamp * 0.02) * 1.0;
-    jitterY = Math.cos(state.timestamp * 0.025) * 0.8;
+    jitterX = Math.sin(renderState.timestamp * 0.02) * 0.8;
+    jitterY = Math.cos(renderState.timestamp * 0.025) * 0.6;
   }
 
   const headR   = 14;
   const bodyW   = b.w * 0.50;
-  const bodyH   = b.h * 0.22;
-  const headX   = b.x + b.w - 40 + jitterX;
-  const friendY = b.y + b.h * 0.36 + (isAwake ? -6 : 0) + jitterY;
+  const bodyH   = b.h * 0.22 + breathOffset; // Chest expansion
+  const headX   = b.x + b.w - 40 + headOffX + jitterX;
+  const friendY = b.y + b.h * 0.36 - sitUpProgress * 8 + headOffY + bodyOffY + jitterY;
 
-  // ── Under-body shadow ─────────────────────────────────────────────
+  // ── 1. Under-body shadow ─────────────────────────────────────────────
   ctx.save();
   ctx.shadowColor   = 'rgba(0,0,0,0.5)';
   ctx.shadowBlur    = 12;
@@ -58,25 +66,30 @@ export function drawFriend(ctx: Ctx, room: Room, state: RenderState): void {
   ctx.fillRect(headX - bodyW - 10, friendY - bodyH / 2 - 4, bodyW + headR * 2 + 10, bodyH + 8);
   ctx.restore();
 
-  // ── Body under covers ─────────────────────────────────────────────
+  // ── 2. Body under covers ─────────────────────────────────────────────
   const bodyX = headX - bodyW;
-  fillRoundRect(ctx, bodyX, friendY - bodyH / 2, bodyW, bodyH, bodyH / 2, C.body);
-  fillRoundRect(ctx, bodyX + 10, friendY - bodyH / 2 + 3, bodyW - 20, bodyH - 6, bodyH / 4, C.bodyDark);
+  ctx.save();
+  ctx.translate(bodyX + bodyW / 2, friendY);
+  ctx.rotate(facingAngle);
+
+  fillRoundRect(ctx, -bodyW / 2, -bodyH / 2, bodyW, bodyH, bodyH / 2, C.body);
+  fillRoundRect(ctx, -bodyW / 2 + 10, -bodyH / 2 + 3, bodyW - 20, bodyH - 6, bodyH / 4, C.bodyDark);
 
   // Blanket edge / shoulder
   ctx.fillStyle = 'rgba(30,47,66,0.6)';
   ctx.beginPath();
-  ctx.ellipse(headX - 14, friendY, 22, bodyH / 2 + 2, 0, 0, Math.PI * 2);
+  ctx.ellipse(bodyW / 2 - 14, 0, 22, bodyH / 2 + 2, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.restore();
 
-  // ── Head ──────────────────────────────────────────────────────────
+  // ── 3. Head ──────────────────────────────────────────────────────────
   ctx.save();
   ctx.shadowColor   = isAwake ? 'rgba(239, 68, 68, 0.4)' : 'rgba(0,0,0,0.6)';
   ctx.shadowBlur    = isAwake ? 14 : 8;
   ctx.shadowOffsetY = 3;
   ctx.fillStyle     = C.head;
   ctx.beginPath();
-  ctx.ellipse(headX, friendY, headR, headR * 0.88, isAwake ? -0.1 : 0, 0, Math.PI * 2);
+  ctx.ellipse(headX, friendY, headR, headR * 0.88, isAwake ? -0.1 : facingAngle * 0.5, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 
@@ -92,42 +105,26 @@ export function drawFriend(ctx: Ctx, room: Room, state: RenderState): void {
   ctx.ellipse(headX + 2, friendY - headR * 0.5, headR * 0.85, headR * 0.55, 0.1, 0, Math.PI * 2);
   ctx.fill();
 
-  // ── Eyes / Expression based on FriendState ────────────────────────
+  // ── 4. Eyes & Facial Expression ──────────────────────────────────────
+  const eyesOpenAmount = ai?.eyesOpenAmount ?? (isAwake ? 1 : 0);
+  drawDynamicEyes(ctx, headX, friendY, eyesOpenAmount, isRestless || isAlmostAwake, isAwake);
+
+  // Mouth & Sweat
   if (isAwake) {
-    // Wide open alert eyes looking straight out!
-    drawAwakeEyes(ctx, headX, friendY);
     // Shocked open mouth
     ctx.fillStyle = '#451a1a';
     ctx.beginPath();
     ctx.ellipse(headX - 2, friendY + 5, 2.5, 3.5, 0, 0, Math.PI * 2);
     ctx.fill();
-  } else if (isAlmostAwake) {
-    // Furrowed, twitching closed eyes
-    drawRestlessEyes(ctx, headX, friendY, true);
-    // Tense mouth
+  } else if (isAlmostAwake || isRestless) {
     ctx.strokeStyle = '#6e4533';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
     ctx.moveTo(headX - 3, friendY + 5);
-    ctx.lineTo(headX + 3, friendY + 4);
+    ctx.lineTo(headX + 3, friendY + (isAlmostAwake ? 4 : 5));
     ctx.stroke();
-    // Sweat drop
-    drawSweat(ctx, headX + 6, friendY - 6);
-  } else if (isRestless) {
-    // Uneasy closed eyes
-    drawRestlessEyes(ctx, headX, friendY, false);
-    // Flat sleeping mouth
-    ctx.strokeStyle = '#8a6a54';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(headX - 2, friendY + 5);
-    ctx.lineTo(headX + 2, friendY + 5);
-    ctx.stroke();
-    // Small sweat drop
     drawSweat(ctx, headX + 6, friendY - 6);
   } else {
-    // Peaceful deep sleep
-    drawDeepSleepEyes(ctx, headX, friendY);
     // Peaceful curved mouth
     ctx.beginPath();
     ctx.arc(headX, friendY + 5, 3, Math.PI * 0.1, Math.PI * 0.9, false);
@@ -136,83 +133,90 @@ export function drawFriend(ctx: Ctx, room: Room, state: RenderState): void {
     ctx.stroke();
   }
 
-  // ── Alert indicator or Zzz animation ──────────────────────────────
+  // ── 5. Indicators, Mumble Bubble & Snore Puff ─────────────────────────
   if (isAwake) {
-    drawAlertIcon(ctx, headX, friendY - 24, state.timestamp);
+    drawAlertIcon(ctx, headX, friendY - 24, renderState.timestamp);
   } else {
-    drawZzz(ctx, headX, friendY, state.timestamp, friendState);
+    // Zzz animation
+    drawZzz(ctx, headX, friendY, renderState.timestamp, friendState);
+
+    // Question mark indicator when almost awake / peeking
+    if (ai && ai.questionMarkAlpha > 0.05) {
+      drawQuestionMark(ctx, headX + 4, friendY - 22, ai.questionMarkAlpha);
+    }
+
+    // Mumble Speech Bubble
+    if (ai && ai.mumbleText && ai.mumbleAlpha > 0.05) {
+      drawMumbleBubble(ctx, headX - 10, friendY - 26, ai.mumbleText, ai.mumbleAlpha);
+    }
+
+    // Snore Puff Animation
+    if (ai && ai.snorePuff) {
+      drawSnorePuff(ctx, headX - 8, friendY - 4, ai.snorePuff.progress);
+    }
   }
 }
 
-// ── Eye Renderers ─────────────────────────────────────────────────────────────
+// ── Dynamic Eyes (interpolates between closed slit, peek, and awake) ───────────
 
-function drawDeepSleepEyes(ctx: Ctx, hx: number, hy: number): void {
-  ctx.strokeStyle = '#7a5a44';
-  ctx.lineWidth   = 1.5;
-  ctx.lineCap     = 'round';
+function drawDynamicEyes(
+  ctx: Ctx,
+  hx: number,
+  hy: number,
+  openAmount: number,
+  isRestless: boolean,
+  isAwake: boolean,
+): void {
+  if (openAmount > 0.2 || isAwake) {
+    const eyeH = 1 + openAmount * 3.5;
+    const eyeW = 3.2;
 
-  ctx.beginPath();
-  ctx.arc(hx - 5, hy + 1, 3.5, Math.PI * 1.1, Math.PI * 1.9, false);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(hx + 4, hy + 1, 3.5, Math.PI * 1.1, Math.PI * 1.9, false);
-  ctx.stroke();
-}
-
-function drawRestlessEyes(ctx: Ctx, hx: number, hy: number, furrowed: boolean): void {
-  ctx.strokeStyle = '#5a3d2c';
-  ctx.lineWidth   = furrowed ? 2 : 1.5;
-  ctx.lineCap     = 'round';
-
-  // Squeezed shut lines
-  ctx.beginPath();
-  ctx.moveTo(hx - 8, hy + 1);
-  ctx.lineTo(hx - 2, hy + (furrowed ? 2 : 1));
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(hx + 1, hy + (furrowed ? 2 : 1));
-  ctx.lineTo(hx + 7, hy + 1);
-  ctx.stroke();
-
-  if (furrowed) {
-    // Brow creases
-    ctx.strokeStyle = '#6e4533';
-    ctx.lineWidth = 1;
+    // Sclera
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.moveTo(hx - 7, hy - 3);
-    ctx.lineTo(hx - 2, hy - 1);
-    ctx.moveTo(hx + 1, hy - 1);
-    ctx.lineTo(hx + 6, hy - 3);
+    ctx.ellipse(hx - 5, hy + 1, eyeW, eyeH, 0, 0, Math.PI * 2);
+    ctx.ellipse(hx + 4, hy + 1, eyeW, eyeH, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pupils
+    ctx.fillStyle = '#111827';
+    ctx.beginPath();
+    ctx.arc(hx - 6 + (isAwake ? 0 : 0.5), hy + 1, Math.min(1.8, eyeH * 0.6), 0, Math.PI * 2);
+    ctx.arc(hx + 3 + (isAwake ? 0 : 0.5), hy + 1, Math.min(1.8, eyeH * 0.6), 0, Math.PI * 2);
+    ctx.fill();
+
+    // Brows
+    ctx.strokeStyle = isAwake ? '#2d1810' : '#5a3d2c';
+    ctx.lineWidth = isAwake ? 1.8 : 1.2;
+    ctx.beginPath();
+    ctx.moveTo(hx - 8, hy - 4);
+    ctx.lineTo(hx - 2, hy - (isAwake ? 5 : 3));
+    ctx.moveTo(hx + 1, hy - (isAwake ? 5 : 3));
+    ctx.lineTo(hx + 7, hy - 4);
+    ctx.stroke();
+  } else if (isRestless) {
+    // Tense closed eyes
+    ctx.strokeStyle = '#5a3d2c';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hx - 8, hy + 1);
+    ctx.lineTo(hx - 2, hy + 2);
+    ctx.moveTo(hx + 1, hy + 2);
+    ctx.lineTo(hx + 7, hy + 1);
+    ctx.stroke();
+  } else {
+    // Calm closed curved eyes
+    ctx.strokeStyle = '#7a5a44';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(hx - 5, hy + 1, 3.5, Math.PI * 1.1, Math.PI * 1.9, false);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(hx + 4, hy + 1, 3.5, Math.PI * 1.1, Math.PI * 1.9, false);
     ctx.stroke();
   }
-}
-
-function drawAwakeEyes(ctx: Ctx, hx: number, hy: number): void {
-  // Sclera (whites of eyes)
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.ellipse(hx - 5, hy + 1, 3.5, 4.5, 0, 0, Math.PI * 2);
-  ctx.ellipse(hx + 4, hy + 1, 3.5, 4.5, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Sharp pupils
-  ctx.fillStyle = '#111827';
-  ctx.beginPath();
-  ctx.arc(hx - 6, hy + 1, 1.8, 0, Math.PI * 2);
-  ctx.arc(hx + 3, hy + 1, 1.8, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Eyebrows raised in alarm
-  ctx.strokeStyle = '#2d1810';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.moveTo(hx - 8, hy - 4);
-  ctx.lineTo(hx - 2, hy - 5);
-  ctx.moveTo(hx + 1, hy - 5);
-  ctx.lineTo(hx + 7, hy - 4);
-  ctx.stroke();
 }
 
 function drawSweat(ctx: Ctx, x: number, y: number): void {
@@ -240,6 +244,62 @@ function drawAlertIcon(ctx: Ctx, x: number, y: number, timestamp: number): void 
   ctx.restore();
 }
 
+function drawQuestionMark(ctx: Ctx, x: number, y: number, alpha: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = 'bold 15px "Space Mono", monospace';
+  ctx.fillStyle = '#fbbf24';
+  ctx.shadowColor = 'rgba(251, 191, 36, 0.8)';
+  ctx.shadowBlur = 8;
+  ctx.textAlign = 'center';
+  ctx.fillText('?', x, y);
+  ctx.restore();
+}
+
+function drawMumbleBubble(ctx: Ctx, x: number, y: number, text: string, alpha: number): void {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.font = 'italic 10px "Inter", system-ui, sans-serif';
+
+  const textWidth = ctx.measureText(text).width;
+  const padX = 6;
+  const padY = 3;
+  const boxW = textWidth + padX * 2;
+  const boxH = 16;
+  const boxX = x - boxW / 2;
+  const boxY = y - boxH / 2;
+
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+  ctx.shadowBlur = 6;
+  fillRoundRect(ctx, boxX, boxY, boxW, boxH, 4, 'rgba(15, 23, 42, 0.85)');
+
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(boxX, boxY, boxW, boxH, 4);
+  ctx.stroke();
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function drawSnorePuff(ctx: Ctx, x: number, y: number, progress: number): void {
+  const alpha = 1 - progress;
+  const radius = 2 + progress * 6;
+  const puffY = y - progress * 10;
+
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.6;
+  ctx.fillStyle = 'rgba(203, 213, 225, 0.5)';
+  ctx.beginPath();
+  ctx.arc(x, puffY, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawZzz(
   ctx: Ctx,
   headX: number,
@@ -250,7 +310,6 @@ function drawZzz(
   const isRestless = state === 'RESTLESS';
   const isAlmostAwake = state === 'ALMOST_AWAKE';
 
-  // Faster or jittery cycle when restless
   const cycleTime = isAlmostAwake ? 2000 : isRestless ? 2500 : ZZZ_CYCLE;
   const t = (timestamp % cycleTime) / cycleTime;
 

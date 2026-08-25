@@ -4,6 +4,7 @@ import { BEDROOM }             from '../data/room';
 import { Player }              from './Player';
 import { NoiseSystem }         from './NoiseSystem';
 import { WakeSystem }          from './WakeSystem';
+import { FriendAI }            from './FriendAI';
 import { InteractionSystem }   from './InteractionSystem';
 import { MissionSystem }       from './MissionSystem';
 import { sound }               from './AudioSystem';
@@ -19,7 +20,7 @@ import { useGameStore }        from '../store/gameStore';
 export const DEBUG_COLLISION = false;
 
 /**
- * Game — owns the canvas rendering loop, physics, stealth, and mission systems.
+ * Game — owns the canvas rendering loop, physics, stealth, friend AI, and mission systems.
  */
 export class Game {
   private ctx:                CanvasRenderingContext2D;
@@ -27,6 +28,7 @@ export class Game {
   private player:             Player;
   private noiseSystem:        NoiseSystem;
   private wakeSystem:         WakeSystem;
+  private friendAI:           FriendAI;
   private interactionSystem:  InteractionSystem;
   private missionSystem:      MissionSystem;
   private inputRef:           { current: InputState };
@@ -54,8 +56,9 @@ export class Game {
 
     this.noiseSystem       = new NoiseSystem(friendHeadPos);
     this.wakeSystem        = new WakeSystem(0);
+    this.friendAI          = new FriendAI();
     this.interactionSystem = new InteractionSystem();
-    this.missionSystem      = new MissionSystem();
+    this.missionSystem     = new MissionSystem();
 
     this.initInteractables();
   }
@@ -109,6 +112,7 @@ export class Game {
 
     this.noiseSystem.reset();
     this.wakeSystem.reset();
+    this.friendAI.reset();
     this.interactionSystem.reset();
     this.missionSystem.reset();
     this.initInteractables();
@@ -134,7 +138,6 @@ export class Game {
 
   private update(dt: number, timestamp: number): void {
     const gameStatus = this.missionSystem.getGameStatus();
-    const isGameOver = this.wakeSystem.getIsGameOver();
 
     // 1. If actively playing, process gameplay systems
     if (gameStatus === 'PLAYING') {
@@ -166,11 +169,14 @@ export class Game {
       this.missionSystem.update(dt, this.wakeSystem.getIsGameOver(), currentStats);
     }
 
-    // 2. Sync with Zustand store for React UI
+    // 2. Update Friend AI routines and random behaviors
     const wakeData = this.wakeSystem.getData(
       this.noiseSystem.getCurrentNoiseRate(),
       this.noiseSystem.getTotalNoiseGenerated(),
     );
+    this.friendAI.update(dt, wakeData.friendState, wakeData.wakeLevel, timestamp);
+
+    // 3. Sync with Zustand store for React UI
     const nearby = this.interactionSystem.getNearby();
     const currentMission = this.missionSystem.getCurrentMission();
 
@@ -248,6 +254,7 @@ export class Game {
       timestamp,
       player: this.player.state,
       wake: wakeData,
+      friendAI: this.friendAI.getState(),
       nearbyInteractable,
       interactionEffects,
       gameStatus,
@@ -306,7 +313,6 @@ export class Game {
   private drawGameCompleteOverlay(ctx: CanvasRenderingContext2D, timestamp: number): void {
     ctx.save();
 
-    // Dark teal semi-transparent tint
     ctx.fillStyle = 'rgba(6, 15, 25, 0.75)';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -332,7 +338,6 @@ export class Game {
     ctx.shadowBlur = 0;
     ctx.fillText('You got the glass of water without waking your friend.', 0, 5);
 
-    // Subtle stats summary
     const stats = this.missionSystem.getCurrentMission()?.stats;
     if (stats) {
       ctx.font = '12px "Space Mono", monospace';

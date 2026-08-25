@@ -106,6 +106,22 @@ export interface WakeData {
   isGameOver: boolean;
 }
 
+// ─── Friend AI Types ─────────────────────────────────────────────────────────
+
+export interface FriendAIState {
+  state: FriendState;
+  breathingOffset: number;
+  facingAngle: number;
+  sitUpProgress: number;
+  eyesOpenAmount: number;
+  headOffset: Vec2;
+  bodyOffset: Vec2;
+  mumbleText: string | null;
+  mumbleAlpha: number;
+  snorePuff: { x: number; y: number; progress: number } | null;
+  questionMarkAlpha: number;
+}
+
 // ─── Interaction System Types ────────────────────────────────────────────────
 
 export interface Interactable {
@@ -157,6 +173,7 @@ export interface RenderState {
   timestamp: number;
   player: PlayerState;
   wake: WakeData;
+  friendAI?: FriendAIState;
   activePrompt?: string | null;
   nearbyInteractable?: Interactable | null;
   interactionEffects?: InteractionEffect[];
