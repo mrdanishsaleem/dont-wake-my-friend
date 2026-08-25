@@ -1,22 +1,22 @@
 import type { Room, RenderState, InputState } from '../types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../types';
-import { BEDROOM }       from '../data/room';
-import { Player }        from './Player';
-import { drawRoom }      from './renderer/drawRoom';
-import { drawFurniture } from './renderer/drawFurniture';
-import { drawFriend }    from './renderer/drawFriend';
-import { drawPlayer }    from './renderer/drawPlayer';
+import { BEDROOM }             from '../data/room';
+import { Player }              from './Player';
+import { drawRoom }            from './renderer/drawRoom';
+import { drawFurniture }       from './renderer/drawFurniture';
+import { drawFriend }          from './renderer/drawFriend';
+import { drawPlayer }          from './renderer/drawPlayer';
+import { drawDebugCollision }  from './renderer/drawDebug';
+
+/** Development flag: set to true to display bounding boxes and collision hitboxes. */
+export const DEBUG_COLLISION = false;
 
 /**
  * Game — owns the canvas rendering loop and coordinates all sub-systems.
  *
- * Part 3 responsibilities:
- *  - Accept an InputState ref from the React layer (useKeyboard).
- *  - Own a Player instance.
- *  - Run a delta-time game loop.
- *  - Render: room → furniture → friend (Zzz) → player.
- *
- * Future parts will add: noise system, wake meter, friend AI, interactions.
+ * Part 4 responsibilities:
+ *  - Integrate reusable collision detection & movement resolution.
+ *  - Support collision debug rendering via DEBUG_COLLISION flag.
  */
 export class Game {
   private ctx:       CanvasRenderingContext2D;
@@ -87,5 +87,10 @@ export class Game {
     drawFurniture(ctx, room);
     drawFriend(ctx, room, state);
     drawPlayer(ctx, state);
+
+    // Optional collision debug overlay
+    if (DEBUG_COLLISION) {
+      drawDebugCollision(ctx, room, this.player.state);
+    }
   }
 }
