@@ -20,7 +20,7 @@ import { useGameStore }        from '../store/gameStore';
 export const DEBUG_COLLISION = false;
 
 /**
- * Game — owns the canvas rendering loop, physics, stealth, friend AI, and mission systems.
+ * Game — coordinates rendering, screen effects, procedural audio, and game state.
  */
 export class Game {
   private ctx:                 CanvasRenderingContext2D;
@@ -32,11 +32,16 @@ export class Game {
   private interactionSystem:   InteractionSystem;
   private missionSystem:       MissionSystem;
   private inputRef:            { current: InputState };
+  private friendHeadPos:       Vec2;
   private rafId:               number  = 0;
   private running:             boolean = false;
   private lastTime:            number  = 0;
   private lastInteractPressed: boolean = false;
   private lastPausePressed:    boolean = false;
+
+  // Screen shake & visual effects
+  private shakeIntensity:      number  = 0;
+  private lastWakeTier:        number  = 0;
 
   constructor(
     ctx:      CanvasRenderingContext2D,
@@ -46,16 +51,14 @@ export class Game {
     this.room     = JSON.parse(JSON.stringify(BEDROOM)) as Room;
     this.inputRef = inputRef;
 
-    // Spawn near bottom-left — open floor area, away from furniture
     this.player = new Player(100, 420);
 
-    // Calculate sleeping friend's head position
     const bed = this.room.objects.find((o) => o.id === 'bed-main');
-    const friendHeadPos: Vec2 = bed
+    this.friendHeadPos = bed
       ? { x: bed.bounds.x + bed.bounds.w - 40, y: bed.bounds.y + bed.bounds.h * 0.36 }
       : { x: 890, y: 115 };
 
-    this.noiseSystem       = new NoiseSystem(friendHeadPos);
+    this.noiseSystem       = new NoiseSystem(this.friendHeadPos);
     this.wakeSystem        = new WakeSystem(0);
     this.friendAI          = new FriendAI();
     this.interactionSystem = new InteractionSystem();
@@ -119,12 +122,14 @@ export class Game {
     this.player.state.facing = 'down';
     this.player.state.moving = false;
 
-    // Reset room items
     const glass = this.room.objects.find((o) => o.id === 'decor-glass');
     if (glass) {
       if (!glass.meta) glass.meta = {};
       glass.meta.collected = false;
     }
+
+    this.shakeIntensity = 0;
+    this.lastWakeTier = 0;
 
     this.noiseSystem.reset();
     this.wakeSystem.reset();
@@ -153,7 +158,7 @@ export class Game {
   // ── Update ───────────────────────────────────────────────
 
   private update(dt: number, timestamp: number): void {
-    // 1. Handle Escape key toggle for pause
+    // 1. Handle Pause toggle (Escape key)
     const isPauseHeld = this.inputRef.current.pause;
     if (isPauseHeld && !this.lastPausePressed) {
       const currentStatus = this.missionSystem.getGameStatus();
@@ -165,9 +170,19 @@ export class Game {
 
     const gameStatus = this.missionSystem.getGameStatus();
 
-    // 2. If actively playing, process gameplay systems
+    // 2. Decay screen shake
+    if (this.shakeIntensity > 0) {
+      this.shakeIntensity = Math.max(0, this.shakeIntensity - dt * 22);
+    }
+
+    // 3. If actively playing, process gameplay
     if (gameStatus === 'PLAYING') {
       this.player.update(dt, this.inputRef.current, this.room);
+
+      // Play soft footstep procedural audio while moving
+      if (this.player.state.moving) {
+        sound.playFootstep();
+      }
 
       const playerCenter: Vec2 = {
         x: this.player.state.x + this.player.state.w / 2,
@@ -187,6 +202,29 @@ export class Game {
       const wakeDelta = this.noiseSystem.update(dt, this.player.state, timestamp);
       this.wakeSystem.update(wakeDelta);
 
+      // Audio sting on wake tier increase
+      const wakeLvl = this.wakeSystem.getWakeLevel();
+      if (wakeLvl >= 85 && this.lastWakeTier < 85) {
+        sound.playWarningSound();
+        this.lastWakeTier = 85;
+      } else if (wakeLvl >= 70 && this.lastWakeTier < 70) {
+        sound.playWarningSound();
+        this.lastWakeTier = 70;
+      } else if (wakeLvl < 65) {
+        this.lastWakeTier = 0;
+      }
+
+      // Heartbeat audio pulse at critical levels
+      if (wakeLvl >= 85) {
+        sound.playHeartbeat();
+      }
+
+      // Check game over
+      if (this.wakeSystem.getIsGameOver()) {
+        sound.playGameOverSound();
+        this.shakeIntensity = 12;
+      }
+
       // Check mission failure on wake limit
       const currentStats = {
         maxWakeLevel: this.wakeSystem.getData().maxWakeLevel,
@@ -195,7 +233,7 @@ export class Game {
       this.missionSystem.update(dt, this.wakeSystem.getIsGameOver(), currentStats);
     }
 
-    // 3. Update Friend AI routines (when not paused)
+    // 4. Update Friend AI routines
     const wakeData = this.wakeSystem.getData(
       this.noiseSystem.getCurrentNoiseRate(),
       this.noiseSystem.getTotalNoiseGenerated(),
@@ -205,7 +243,7 @@ export class Game {
       this.friendAI.update(dt, wakeData.friendState, wakeData.wakeLevel, timestamp);
     }
 
-    // 4. Sync with Zustand store for React UI
+    // 5. Sync with Zustand store for React UI
     const nearby = this.interactionSystem.getNearby();
     const currentMission = this.missionSystem.getCurrentMission();
 
@@ -224,8 +262,9 @@ export class Game {
     const { item, noise } = result;
 
     if (item.id === 'decor-glass') {
-      // 1. Play sounds
+      // 1. Play sounds & screen shake
       sound.playPickupSound();
+      this.shakeIntensity = 5;
 
       // 2. Generate noise
       const itemPos: Vec2 = { x: item.x, y: item.y };
@@ -273,6 +312,14 @@ export class Game {
 
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+    // Apply Screen Shake if active
+    ctx.save();
+    if (this.shakeIntensity > 0) {
+      const sx = (Math.random() - 0.5) * this.shakeIntensity;
+      const sy = (Math.random() - 0.5) * this.shakeIntensity;
+      ctx.translate(sx, sy);
+    }
+
     const wakeData = this.wakeSystem.getData(
       this.noiseSystem.getCurrentNoiseRate(),
       this.noiseSystem.getTotalNoiseGenerated(),
@@ -294,14 +341,14 @@ export class Game {
     };
 
     // 1. Base scene
-    drawRoom(ctx, room);
+    drawRoom(ctx, room, timestamp);
     drawFurniture(ctx, room);
     drawFriend(ctx, room, state);
     drawPlayer(ctx, state);
 
     // 2. Interaction prompts & effects (when playing)
     if (gameStatus === 'PLAYING') {
-      drawInteraction(ctx, state);
+      drawInteraction(ctx, state, this.friendHeadPos);
       this.drawDangerEffects(ctx, wakeData.wakeLevel, timestamp);
     }
 
@@ -309,21 +356,38 @@ export class Game {
     if (DEBUG_COLLISION) {
       drawDebugCollision(ctx, room, this.player.state);
     }
+
+    ctx.restore();
   }
 
-  // ── Visual feedback overlays ──────────────────────────────
+  // ── Visual feedback overlays (vignette & heartbeat border) ──
 
   private drawDangerEffects(ctx: CanvasRenderingContext2D, wakeLevel: number, timestamp: number): void {
     if (wakeLevel < 70) return;
 
     ctx.save();
-    if (wakeLevel >= 95) {
-      const pulse = 0.35 + Math.sin(timestamp * 0.008) * 0.15;
+    if (wakeLevel >= 90) {
+      // Urgent pulsing red heartbeat vignette
+      const pulse = 0.35 + Math.sin(timestamp * 0.01) * 0.18;
       ctx.strokeStyle = `rgba(239, 68, 68, ${pulse})`;
       ctx.lineWidth = 14;
       ctx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      // Dark red corner vignettes
+      const vig = ctx.createRadialGradient(
+        CANVAS_WIDTH / 2,
+        CANVAS_HEIGHT / 2,
+        CANVAS_WIDTH * 0.3,
+        CANVAS_WIDTH / 2,
+        CANVAS_HEIGHT / 2,
+        CANVAS_WIDTH * 0.55,
+      );
+      vig.addColorStop(0, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, `rgba(220, 38, 38, ${pulse * 0.35})`);
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     } else if (wakeLevel >= 85) {
-      const pulse = 0.2 + Math.sin(timestamp * 0.005) * 0.1;
+      const pulse = 0.2 + Math.sin(timestamp * 0.006) * 0.12;
       ctx.strokeStyle = `rgba(249, 115, 22, ${pulse})`;
       ctx.lineWidth = 8;
       ctx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);

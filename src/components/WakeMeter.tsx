@@ -1,11 +1,19 @@
+import { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
+import { sound } from '../game/AudioSystem';
 
 export function WakeMeter({ onRestart }: { onRestart?: () => void }) {
   const wakeLevel = useGameStore((s) => s.wakeLevel);
   const friendState = useGameStore((s) => s.friendState);
   const isGameOver = useGameStore((s) => s.isGameOver);
+  const [isMuted, setIsMuted] = useState(sound.getIsMuted());
 
   const roundedLevel = Math.round(wakeLevel);
+
+  const toggleAudio = () => {
+    const muted = sound.toggleMute();
+    setIsMuted(muted);
+  };
 
   // Generate ASCII / block bar
   const totalBlocks = 16;
@@ -48,7 +56,16 @@ export function WakeMeter({ onRestart }: { onRestart?: () => void }) {
       }`}
     >
       <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="panel-label !mb-0">WAKE LEVEL</span>
+        <div className="flex items-center gap-2">
+          <span className="panel-label !mb-0">WAKE LEVEL</span>
+          <button
+            onClick={toggleAudio}
+            className="text-[0.65rem] text-slate-400 hover:text-slate-200 transition-colors"
+            title={isMuted ? 'Unmute Audio' : 'Mute Audio'}
+          >
+            {isMuted ? '🔇' : '🔊'}
+          </button>
+        </div>
         <span
           className={`text-[0.65rem] font-mono font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${badgeColor}`}
         >
@@ -63,7 +80,11 @@ export function WakeMeter({ onRestart }: { onRestart?: () => void }) {
         </span>
         <span
           className={`font-bold font-mono text-sm min-w-[3rem] text-right ${
-            wakeLevel >= 85 ? 'text-red-400' : wakeLevel >= 70 ? 'text-amber-400' : 'text-slate-200'
+            wakeLevel >= 85
+              ? 'text-red-400'
+              : wakeLevel >= 70
+                ? 'text-amber-400'
+                : 'text-slate-200'
           }`}
         >
           {roundedLevel}%

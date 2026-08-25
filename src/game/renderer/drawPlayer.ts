@@ -1,18 +1,8 @@
 /**
- * drawPlayer — renders the player character as a stylized top-down figure.
- *
- * The character is drawn relative to (state.x, state.y) which is the
- * top-left corner of their collision box.
- *
- * Visual anatomy (top-down view):
- *  - Body: rounded rectangle, slightly taller than wide
- *  - Head: circle at the front edge (indicates facing direction)
- *  - Subtle shadow beneath
- *  - Walking animation: body bob when moving (driven by timestamp)
- *  - Direction indicator: a small bright dot on the face side
- *
- * All colours use a teal/blue palette so the player stands out from the
- * warm-brown/dark-navy bedroom environment.
+ * drawPlayer — renders the player character with stylized pixel-art details:
+ *   - animated walking feet / shoes with stepping cycle
+ *   - direction-aware hair, torso, and eye direction
+ *   - soft realistic drop shadow and movement glow
  */
 
 import type { PlayerState, RenderState } from '../../types';
@@ -20,114 +10,167 @@ import { fillRoundRect } from './drawPrimitives';
 
 type Ctx = CanvasRenderingContext2D;
 
-// ── Palette ───────────────────────────────────────────────────────────────────
 const C = {
-  shadow:    'rgba(0,0,0,0.45)',
+  shadow:    'rgba(0,0,0,0.5)',
   bodyFill:  '#1e6a8a',
   bodyEdge:  '#4ab0d8',
   bodyShade: '#155a76',
   headFill:  '#e8c99a',
   headEdge:  '#f0d8b0',
   headShade: '#c8a070',
-  eyeDot:    '#1a1a2e',
-  // Glow ring when moving
-  glowRing:  'rgba(74, 176, 216, 0.22)',
+  hair:      '#231818',
+  shoes:     '#0e1726',
+  shoeEdge:  '#38bdf8',
+  eyeDot:    '#0f172a',
+  glowRing:  'rgba(74, 176, 216, 0.25)',
 };
 
-/** Step frequency: full bob cycle per second when walking. */
 const BOB_FREQ = 5.5;
-/** Max bob offset in pixels. */
 const BOB_AMP  = 1.5;
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 export function drawPlayer(ctx: Ctx, rs: RenderState): void {
   const { player: p, timestamp } = rs;
 
-  // Centre of the collision box
   const cx = p.x + p.w / 2;
   const cy = p.y + p.h / 2;
 
-  // Bob offset — tiny vertical oscillation while walking
+  // Walking bob
   const bob = p.moving
     ? Math.sin((timestamp / 1000) * BOB_FREQ * Math.PI * 2) * BOB_AMP
     : 0;
 
-  // ── Drop shadow ───────────────────────────────────────────────────
+  // ── 1. Drop shadow ───────────────────────────────────────────────────
   ctx.save();
-  ctx.shadowColor  = C.shadow;
-  ctx.shadowBlur   = 10;
-  ctx.shadowOffsetY = 4;
-  ctx.fillStyle    = 'rgba(0,0,0,0.01)';
-  ctx.fillRect(p.x - 2, p.y + 2, p.w + 4, p.h + 4);
+  ctx.fillStyle = C.shadow;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 8, p.w * 0.55, p.h * 0.28, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 
-  // ── Glow ring (visible when moving) ──────────────────────────────
+  // ── 2. Animated Feet / Shoes (draw beneath body) ─────────────────────
+  drawFeet(ctx, p, timestamp, bob);
+
+  // ── 3. Subtle Movement Glow ──────────────────────────────────────────
   if (p.moving) {
     ctx.save();
-    ctx.globalAlpha = 0.7;
+    ctx.globalAlpha = 0.6;
     ctx.strokeStyle = C.glowRing;
-    ctx.lineWidth   = 6;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.ellipse(cx, cy + bob, p.w * 0.7, p.h * 0.45, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy + bob, p.w * 0.65, p.h * 0.45, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
 
-  // ── Body ──────────────────────────────────────────────────────────
-  // Draw the body slightly offset by the bob value
+  // ── 4. Torso / Body ──────────────────────────────────────────────────
   const bodyX = p.x + 2;
   const bodyY = p.y + 4 + bob;
   const bodyW = p.w - 4;
   const bodyH = p.h - 6;
 
-  // Body shade (bottom half, gives depth)
-  fillRoundRect(ctx, bodyX, bodyY + bodyH * 0.4, bodyW, bodyH * 0.6, 4, C.bodyShade);
-  // Main body fill
+  // Body shade (depth)
+  fillRoundRect(ctx, bodyX, bodyY + bodyH * 0.38, bodyW, bodyH * 0.62, 4, C.bodyShade);
+  // Main shirt fill
   fillRoundRect(ctx, bodyX, bodyY, bodyW, bodyH, 5, C.bodyFill);
-  // Body outline
+  // Outline
   ctx.strokeStyle = C.bodyEdge;
-  ctx.lineWidth   = 1.5;
+  ctx.lineWidth = 1.4;
   ctx.beginPath();
   ctx.roundRect(bodyX, bodyY, bodyW, bodyH, 5);
   ctx.stroke();
 
-  // Subtle torso line (shirt crease)
-  ctx.strokeStyle = 'rgba(30, 100, 140, 0.5)';
-  ctx.lineWidth   = 1;
+  // Collar crease
+  ctx.strokeStyle = 'rgba(74, 176, 216, 0.4)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(bodyX + 3,       bodyY + bodyH * 0.52);
-  ctx.lineTo(bodyX + bodyW - 3, bodyY + bodyH * 0.52);
+  ctx.moveTo(bodyX + 4, bodyY + bodyH * 0.45);
+  ctx.lineTo(bodyX + bodyW - 4, bodyY + bodyH * 0.45);
   ctx.stroke();
 
-  // ── Head ──────────────────────────────────────────────────────────
-  const headR  = 5.5;
+  // ── 5. Head ──────────────────────────────────────────────────────────
+  const headR = 5.5;
   const headPos = getHeadPosition(p.x, p.y, p.w, p.h, p.facing, bob);
 
-  // Head shadow fill (off-center)
+  // Head shadow
   ctx.fillStyle = C.headShade;
   ctx.beginPath();
   ctx.ellipse(headPos.x + 0.5, headPos.y + 1, headR * 0.85, headR * 0.75, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Head fill
+  // Head base
   ctx.fillStyle = C.headFill;
   ctx.beginPath();
   ctx.arc(headPos.x, headPos.y, headR, 0, Math.PI * 2);
   ctx.fill();
 
-  // Head edge
+  // Hair
+  drawHair(ctx, headPos.x, headPos.y, headR, p.facing);
+
+  // Head outline
   ctx.strokeStyle = C.headEdge;
-  ctx.lineWidth   = 1;
+  ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.arc(headPos.x, headPos.y, headR, 0, Math.PI * 2);
   ctx.stroke();
 
-  // ── Eyes — two small dots oriented toward facing direction ────────
+  // ── 6. Eyes ──────────────────────────────────────────────────────────
   drawEyes(ctx, headPos.x, headPos.y, headR, p.facing);
 }
 
-// ── Head position — placed at the leading edge for the facing direction ───────
+function drawFeet(ctx: Ctx, p: PlayerState, timestamp: number, _bob: number): void {
+  const stepPhase = (timestamp / 1000) * BOB_FREQ * Math.PI * 2;
+  const footSwing = p.moving ? Math.sin(stepPhase) * 2.5 : 0;
+
+  const cx = p.x + p.w / 2;
+  const cy = p.y + p.h / 2;
+
+  ctx.save();
+  ctx.fillStyle = C.shoes;
+  ctx.strokeStyle = C.shoeEdge;
+  ctx.lineWidth = 0.8;
+
+  if (p.facing === 'up' || p.facing === 'down') {
+    // Left foot
+    const f1x = cx - 5;
+    const f1y = cy + 4 + (p.facing === 'up' ? -footSwing : footSwing);
+    ctx.fillRect(f1x - 2, f1y - 2, 4, 5);
+    ctx.strokeRect(f1x - 2, f1y - 2, 4, 5);
+
+    // Right foot
+    const f2x = cx + 5;
+    const f2y = cy + 4 + (p.facing === 'up' ? footSwing : -footSwing);
+    ctx.fillRect(f2x - 2, f2y - 2, 4, 5);
+    ctx.strokeRect(f2x - 2, f2y - 2, 4, 5);
+  } else {
+    // Left or right facing feet
+    const f1x = cx + (p.facing === 'right' ? footSwing : -footSwing);
+    const f1y = cy + 4;
+    ctx.fillRect(f1x - 3, f1y - 2, 6, 4);
+    ctx.strokeRect(f1x - 3, f1y - 2, 6, 4);
+  }
+
+  ctx.restore();
+}
+
+function drawHair(ctx: Ctx, hx: number, hy: number, headR: number, facing: PlayerState['facing']): void {
+  ctx.fillStyle = C.hair;
+  ctx.beginPath();
+
+  if (facing === 'down') {
+    // Hair on top and back of head
+    ctx.ellipse(hx, hy - 2, headR * 0.9, headR * 0.6, 0, 0, Math.PI * 2);
+  } else if (facing === 'up') {
+    // Hair covers most of head
+    ctx.ellipse(hx, hy, headR * 0.95, headR * 0.9, 0, 0, Math.PI * 2);
+  } else if (facing === 'left') {
+    // Hair parted to right
+    ctx.ellipse(hx + 1.5, hy - 1, headR * 0.8, headR * 0.8, 0, 0, Math.PI * 2);
+  } else {
+    // Hair parted to left
+    ctx.ellipse(hx - 1.5, hy - 1, headR * 0.8, headR * 0.8, 0, 0, Math.PI * 2);
+  }
+  ctx.fill();
+}
 
 function getHeadPosition(
   px: number, py: number,
@@ -146,43 +189,35 @@ function getHeadPosition(
   }
 }
 
-// ── Eyes — two tiny dots on the face, oriented toward movement ────────────────
-
 function drawEyes(
   ctx: Ctx,
   hx: number, hy: number,
-  headR: number,
+  _headR: number,
   facing: PlayerState['facing'],
 ): void {
-  // Offset from head centre to place eyes toward the front of the head
+  if (facing === 'up') return; // Head facing away, eyes hidden
+
   const forward = 2.2;
   const spread  = 2.0;
 
   let e1x: number, e1y: number, e2x: number, e2y: number;
 
   switch (facing) {
-    case 'up':
-      e1x = hx - spread; e1y = hy - forward;
-      e2x = hx + spread; e2y = hy - forward;
-      break;
     case 'down':
       e1x = hx - spread; e1y = hy + forward;
       e2x = hx + spread; e2y = hy + forward;
       break;
     case 'left':
-      e1x = hx - forward; e1y = hy - spread;
-      e2x = hx - forward; e2y = hy + spread;
+      e1x = hx - forward; e1y = hy - spread * 0.7;
+      e2x = hx - forward; e2y = hy + spread * 0.7;
       break;
     case 'right':
-      e1x = hx + forward; e1y = hy - spread;
-      e2x = hx + forward; e2y = hy + spread;
+      e1x = hx + forward; e1y = hy - spread * 0.7;
+      e2x = hx + forward; e2y = hy + spread * 0.7;
       break;
     default:
       e1x = hx; e1y = hy; e2x = hx; e2y = hy;
   }
-
-  // Only draw eyes if head is large enough to show them
-  if (headR < 4) return;
 
   ctx.fillStyle = C.eyeDot;
   ctx.beginPath();
