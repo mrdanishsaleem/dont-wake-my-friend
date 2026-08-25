@@ -77,6 +77,7 @@ export interface InputState {
   left:     boolean;
   right:    boolean;
   interact: boolean;
+  pause:    boolean;
 }
 
 // ─── Noise & Wake System Types ───────────────────────────────────────────────
@@ -145,16 +146,20 @@ export interface InteractionEffect {
   text?: string;
 }
 
-// ─── Mission System Types ────────────────────────────────────────────────────
+// ─── Mission & Game State Types ──────────────────────────────────────────────
 
 export type MissionStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 
-export type GameStatus = 'PLAYING' | 'GAME_COMPLETE' | 'GAME_OVER';
+export type GameStatus = 'MENU' | 'PLAYING' | 'PAUSED' | 'GAME_COMPLETE' | 'GAME_OVER';
+
+export type StealthRating = 'NINJA' | 'PROFESSIONAL SNEAK' | 'DECENT' | 'WALKING DISASTER';
 
 export interface MissionStats {
   timeTaken: number; // in seconds
   maxWakeLevel: number;
   totalNoiseGenerated: number;
+  stealthRating: StealthRating;
+  stealthScore: number;
 }
 
 export interface Mission {

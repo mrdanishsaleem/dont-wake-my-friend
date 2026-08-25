@@ -4,6 +4,13 @@ import { useGameStore } from '../store/gameStore';
 import { useKeyboard } from './useKeyboard';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../types';
 
+export interface GameControls {
+  restart: () => void;
+  pause: () => void;
+  resume: () => void;
+  togglePause: () => void;
+}
+
 /**
  * useGame — mounts and owns the Game instance for the lifetime of GameCanvas.
  */
@@ -17,6 +24,18 @@ export function useGame() {
 
   const restart = useCallback(() => {
     gameRef.current?.restart();
+  }, []);
+
+  const pause = useCallback(() => {
+    gameRef.current?.pause();
+  }, []);
+
+  const resume = useCallback(() => {
+    gameRef.current?.resume();
+  }, []);
+
+  const togglePause = useCallback(() => {
+    gameRef.current?.togglePause();
   }, []);
 
   useEffect(() => {
@@ -47,5 +66,5 @@ export function useGame() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setRunning]);
 
-  return { canvasRef, restart };
+  return { canvasRef, restart, pause, resume, togglePause };
 }

@@ -10,6 +10,7 @@ import type { InputState } from '../types';
  *   A / ArrowLeft  → left
  *   D / ArrowRight → right
  *   E              → interact
+ *   Escape         → pause
  */
 export function useKeyboard(): React.RefObject<InputState> {
   const inputRef = useRef<InputState>({
@@ -18,6 +19,7 @@ export function useKeyboard(): React.RefObject<InputState> {
     left: false,
     right: false,
     interact: false,
+    pause: false,
   });
 
   useEffect(() => {
@@ -28,6 +30,7 @@ export function useKeyboard(): React.RefObject<InputState> {
         case 'KeyA':      case 'ArrowLeft':  return 'left';
         case 'KeyD':      case 'ArrowRight': return 'right';
         case 'KeyE':                         return 'interact';
+        case 'Escape':                       return 'pause';
         default: return null;
       }
     }
@@ -35,8 +38,7 @@ export function useKeyboard(): React.RefObject<InputState> {
     function onKeyDown(e: KeyboardEvent): void {
       const action = toAction(e.code);
       if (action) {
-        if (action !== 'interact') {
-          // Prevent arrow keys from scrolling the page
+        if (action !== 'interact' && action !== 'pause') {
           e.preventDefault();
         }
         inputRef.current[action] = true;
@@ -57,6 +59,7 @@ export function useKeyboard(): React.RefObject<InputState> {
       inputRef.current.left     = false;
       inputRef.current.right    = false;
       inputRef.current.interact = false;
+      inputRef.current.pause    = false;
     }
 
     window.addEventListener('keydown', onKeyDown);

@@ -1,4 +1,4 @@
-import type { Room, RenderState, InputState, Vec2, MissionStats } from '../types';
+import type { Room, RenderState, InputState, Vec2 } from '../types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../types';
 import { BEDROOM }             from '../data/room';
 import { Player }              from './Player';
@@ -23,19 +23,20 @@ export const DEBUG_COLLISION = false;
  * Game — owns the canvas rendering loop, physics, stealth, friend AI, and mission systems.
  */
 export class Game {
-  private ctx:                CanvasRenderingContext2D;
-  private room:               Room;
-  private player:             Player;
-  private noiseSystem:        NoiseSystem;
-  private wakeSystem:         WakeSystem;
-  private friendAI:           FriendAI;
-  private interactionSystem:  InteractionSystem;
-  private missionSystem:      MissionSystem;
-  private inputRef:           { current: InputState };
-  private rafId:              number  = 0;
-  private running:            boolean = false;
-  private lastTime:           number  = 0;
+  private ctx:                 CanvasRenderingContext2D;
+  private room:                Room;
+  private player:              Player;
+  private noiseSystem:         NoiseSystem;
+  private wakeSystem:          WakeSystem;
+  private friendAI:            FriendAI;
+  private interactionSystem:   InteractionSystem;
+  private missionSystem:       MissionSystem;
+  private inputRef:            { current: InputState };
+  private rafId:               number  = 0;
+  private running:             boolean = false;
+  private lastTime:            number  = 0;
   private lastInteractPressed: boolean = false;
+  private lastPausePressed:    boolean = false;
 
   constructor(
     ctx:      CanvasRenderingContext2D,
@@ -81,7 +82,7 @@ export class Game {
     });
   }
 
-  // ── Lifecycle ────────────────────────────────────────────
+  // ── Lifecycle & Controls ─────────────────────────────────
 
   start(): void {
     if (this.running) return;
@@ -93,6 +94,21 @@ export class Game {
   stop(): void {
     this.running = false;
     cancelAnimationFrame(this.rafId);
+  }
+
+  pause(): void {
+    this.missionSystem.pause();
+    useGameStore.getState().setGameStatus('PAUSED');
+  }
+
+  resume(): void {
+    this.missionSystem.resume();
+    useGameStore.getState().setGameStatus('PLAYING');
+  }
+
+  togglePause(): void {
+    this.missionSystem.togglePause();
+    useGameStore.getState().setGameStatus(this.missionSystem.getGameStatus());
   }
 
   restart(): void {
@@ -137,9 +153,19 @@ export class Game {
   // ── Update ───────────────────────────────────────────────
 
   private update(dt: number, timestamp: number): void {
+    // 1. Handle Escape key toggle for pause
+    const isPauseHeld = this.inputRef.current.pause;
+    if (isPauseHeld && !this.lastPausePressed) {
+      const currentStatus = this.missionSystem.getGameStatus();
+      if (currentStatus === 'PLAYING' || currentStatus === 'PAUSED') {
+        this.togglePause();
+      }
+    }
+    this.lastPausePressed = isPauseHeld;
+
     const gameStatus = this.missionSystem.getGameStatus();
 
-    // 1. If actively playing, process gameplay systems
+    // 2. If actively playing, process gameplay systems
     if (gameStatus === 'PLAYING') {
       this.player.update(dt, this.inputRef.current, this.room);
 
@@ -169,14 +195,17 @@ export class Game {
       this.missionSystem.update(dt, this.wakeSystem.getIsGameOver(), currentStats);
     }
 
-    // 2. Update Friend AI routines and random behaviors
+    // 3. Update Friend AI routines (when not paused)
     const wakeData = this.wakeSystem.getData(
       this.noiseSystem.getCurrentNoiseRate(),
       this.noiseSystem.getTotalNoiseGenerated(),
     );
-    this.friendAI.update(dt, wakeData.friendState, wakeData.wakeLevel, timestamp);
 
-    // 3. Sync with Zustand store for React UI
+    if (gameStatus !== 'PAUSED') {
+      this.friendAI.update(dt, wakeData.friendState, wakeData.wakeLevel, timestamp);
+    }
+
+    // 4. Sync with Zustand store for React UI
     const nearby = this.interactionSystem.getNearby();
     const currentMission = this.missionSystem.getCurrentMission();
 
@@ -185,7 +214,7 @@ export class Game {
     store.setGameStatus(this.missionSystem.getGameStatus());
     store.setCurrentMission(currentMission);
     store.setElapsedTime(this.missionSystem.getElapsedTime());
-    store.setNearbyPrompt(nearby ? nearby.promptText : null);
+    store.setNearbyPrompt(nearby && gameStatus === 'PLAYING' ? nearby.promptText : null);
   }
 
   private handleInteraction(timestamp: number): void {
@@ -220,14 +249,17 @@ export class Game {
 
       // 4. Complete Mission if friend didn't wake up
       if (!this.wakeSystem.getIsGameOver()) {
-        const stats: MissionStats = {
+        const rawStats = {
           timeTaken: this.missionSystem.getElapsedTime(),
           maxWakeLevel: Math.round(this.wakeSystem.getData().maxWakeLevel),
           totalNoiseGenerated: Math.round(this.noiseSystem.getTotalNoiseGenerated()),
         };
 
-        this.missionSystem.completeMission(stats);
-        store.setMissionStats(stats);
+        this.missionSystem.completeMission(rawStats);
+        const mission = this.missionSystem.getCurrentMission();
+        if (mission?.stats) {
+          store.setMissionStats(mission.stats);
+        }
         store.setGameStatus('GAME_COMPLETE');
         sound.playSuccessSound();
       }
@@ -255,7 +287,7 @@ export class Game {
       player: this.player.state,
       wake: wakeData,
       friendAI: this.friendAI.getState(),
-      nearbyInteractable,
+      nearbyInteractable: gameStatus === 'PLAYING' ? nearbyInteractable : null,
       interactionEffects,
       gameStatus,
       currentMission: this.missionSystem.getCurrentMission(),
@@ -267,20 +299,13 @@ export class Game {
     drawFriend(ctx, room, state);
     drawPlayer(ctx, state);
 
-    // 2. Interaction prompts & effects
-    drawInteraction(ctx, state);
-
-    // 3. Danger alerts
-    this.drawDangerEffects(ctx, wakeData.wakeLevel, timestamp);
-
-    // 4. Game Complete or Game Over banner overlays
-    if (gameStatus === 'GAME_COMPLETE') {
-      this.drawGameCompleteOverlay(ctx, timestamp);
-    } else if (wakeData.isGameOver || gameStatus === 'GAME_OVER') {
-      this.drawGameOverOverlay(ctx, timestamp);
+    // 2. Interaction prompts & effects (when playing)
+    if (gameStatus === 'PLAYING') {
+      drawInteraction(ctx, state);
+      this.drawDangerEffects(ctx, wakeData.wakeLevel, timestamp);
     }
 
-    // 5. Optional collision debug overlay
+    // 3. Optional collision debug overlay
     if (DEBUG_COLLISION) {
       drawDebugCollision(ctx, room, this.player.state);
     }
@@ -307,81 +332,6 @@ export class Game {
       ctx.lineWidth = 4;
       ctx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
-    ctx.restore();
-  }
-
-  private drawGameCompleteOverlay(ctx: CanvasRenderingContext2D, timestamp: number): void {
-    ctx.save();
-
-    ctx.fillStyle = 'rgba(6, 15, 25, 0.75)';
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    const pulse = 1 + Math.sin(timestamp * 0.005) * 0.02;
-    const cx = CANVAS_WIDTH / 2;
-    const cy = CANVAS_HEIGHT / 2;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(pulse, pulse);
-
-    ctx.shadowColor = 'rgba(56, 189, 248, 0.8)';
-    ctx.shadowBlur = 20;
-
-    ctx.font = 'bold 34px "Space Mono", monospace';
-    ctx.fillStyle = '#38bdf8';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('MISSION COMPLETE!', 0, -35);
-
-    ctx.font = '500 15px "Inter", system-ui, sans-serif';
-    ctx.fillStyle = '#cbd5e1';
-    ctx.shadowBlur = 0;
-    ctx.fillText('You got the glass of water without waking your friend.', 0, 5);
-
-    const stats = this.missionSystem.getCurrentMission()?.stats;
-    if (stats) {
-      ctx.font = '12px "Space Mono", monospace';
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText(
-        `TIME: ${stats.timeTaken.toFixed(1)}s  |  MAX WAKE: ${stats.maxWakeLevel}%  |  TOTAL NOISE: ${stats.totalNoiseGenerated}`,
-        0,
-        38,
-      );
-    }
-
-    ctx.restore();
-    ctx.restore();
-  }
-
-  private drawGameOverOverlay(ctx: CanvasRenderingContext2D, timestamp: number): void {
-    ctx.save();
-
-    ctx.fillStyle = 'rgba(10, 8, 18, 0.75)';
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    const pulse = 1 + Math.sin(timestamp * 0.006) * 0.03;
-    const cx = CANVAS_WIDTH / 2;
-    const cy = CANVAS_HEIGHT / 2;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.scale(pulse, pulse);
-
-    ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
-    ctx.shadowBlur = 24;
-
-    ctx.font = 'bold 36px "Space Mono", monospace';
-    ctx.fillStyle = '#ef4444';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('YOU WOKE YOUR FRIEND!', 0, -20);
-
-    ctx.font = '14px "Space Mono", monospace';
-    ctx.fillStyle = '#94a3b8';
-    ctx.shadowBlur = 0;
-    ctx.fillText('Too much noise was made near the bed.', 0, 25);
-
-    ctx.restore();
     ctx.restore();
   }
 }

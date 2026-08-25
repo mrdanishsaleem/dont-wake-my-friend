@@ -1,21 +1,21 @@
-import { useGame } from '../hooks/useGame';
+import { useGame, type GameControls } from '../hooks/useGame';
 import { useEffect } from 'react';
 
 interface GameCanvasProps {
-  onGameReady?: (controls: { restart: () => void }) => void;
+  onGameReady?: (controls: GameControls) => void;
 }
 
 /**
- * GameCanvas — the single canvas element that hosts the game.
+ * GameCanvas — hosts the HTML5 canvas element and lifecycle connection.
  */
 export function GameCanvas({ onGameReady }: GameCanvasProps) {
-  const { canvasRef, restart } = useGame();
+  const { canvasRef, restart, pause, resume, togglePause } = useGame();
 
   useEffect(() => {
     if (onGameReady) {
-      onGameReady({ restart });
+      onGameReady({ restart, pause, resume, togglePause });
     }
-  }, [onGameReady, restart]);
+  }, [onGameReady, restart, pause, resume, togglePause]);
 
   return (
     <canvas
