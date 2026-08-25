@@ -59,12 +59,50 @@ export interface Room {
   objects: RoomObject[];
 }
 
+// ─── Player ──────────────────────────────────────────────────────────────────
+
+/** Cardinal + diagonal directions the player can face / move. */
+export type Direction = 'up' | 'down' | 'left' | 'right';
+
+/** Mutable movement state owned by the Player class. */
+export interface PlayerState {
+  x: number;
+  y: number;
+  /** Collision box dimensions. */
+  w: number;
+  h: number;
+  /** Pixels per second. */
+  speed: number;
+  /** Current velocity this frame (pixels/sec). Normalised for diagonals. */
+  vx: number;
+  vy: number;
+  /** Last direction the player was moving — used for sprite orientation. */
+  facing: Direction;
+  /** True when any movement key is held. */
+  moving: boolean;
+}
+
+// ─── Input ───────────────────────────────────────────────────────────────────
+
+/**
+ * Snapshot of which movement actions are currently active.
+ * Decoupled from raw key codes so remapping is trivial later.
+ */
+export interface InputState {
+  up:    boolean;
+  down:  boolean;
+  left:  boolean;
+  right: boolean;
+}
+
 // ─── Animation helpers ───────────────────────────────────────────────────────
 
 /** State threaded through every render call so sub-renderers can animate. */
 export interface RenderState {
   /** Monotonically increasing timestamp from requestAnimationFrame (ms). */
   timestamp: number;
+  /** The player's current state (position, facing, moving flag). */
+  player: PlayerState;
 }
 
 // ─── Canvas resolution ───────────────────────────────────────────────────────
