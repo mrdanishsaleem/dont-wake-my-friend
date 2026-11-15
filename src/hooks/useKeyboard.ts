@@ -1,3 +1,4 @@
+import { sound } from '../game/AudioSystem';
 import { useEffect, useRef } from 'react';
 import type { InputState } from '../types';
 
@@ -11,6 +12,7 @@ import type { InputState } from '../types';
  *   D / ArrowRight → right
  *   E              → interact
  *   F              → throw a distraction
+ *   Shift          → slow, quiet movement
  *   Escape         → pause
  */
 export function useKeyboard(): React.RefObject<InputState> {
@@ -22,9 +24,12 @@ export function useKeyboard(): React.RefObject<InputState> {
     interact: false,
     distract: false,
     pause: false,
+    sneak: false,
   });
 
   useEffect(() => {
+    const heldKeys = new Map<string, keyof InputState>();
+
     function toAction(code: string): keyof InputState | null {
       switch (code) {
         case 'KeyW':      case 'ArrowUp':    return 'up';
@@ -33,6 +38,7 @@ export function useKeyboard(): React.RefObject<InputState> {
         case 'KeyD':      case 'ArrowRight': return 'right';
         case 'KeyE':                         return 'interact';
         case 'KeyF':                         return 'distract';
+        case 'ShiftLeft': case 'ShiftRight': return 'sneak';
         case 'Escape':                       return 'pause';
         default: return null;
       }
@@ -41,9 +47,11 @@ export function useKeyboard(): React.RefObject<InputState> {
     function onKeyDown(e: KeyboardEvent): void {
       const action = toAction(e.code);
       if (action) {
-        if (action !== 'interact' && action !== 'distract' && action !== 'pause') {
+        if (action !== 'interact' && action !== 'distract' && action !== 'pause' && action !== 'sneak') {
           e.preventDefault();
+          if (!e.repeat) sound.unlock();
         }
+        heldKeys.set(e.code, action);
         inputRef.current[action] = true;
       }
     }
@@ -51,19 +59,22 @@ export function useKeyboard(): React.RefObject<InputState> {
     function onKeyUp(e: KeyboardEvent): void {
       const action = toAction(e.code);
       if (action) {
-        inputRef.current[action] = false;
+        heldKeys.delete(e.code);
+        inputRef.current[action] = Array.from(heldKeys.values()).includes(action);
       }
     }
 
     // Reset all keys on blur
     function onBlur(): void {
+      heldKeys.clear();
       inputRef.current.up       = false;
       inputRef.current.down     = false;
       inputRef.current.left     = false;
       inputRef.current.right    = false;
-    inputRef.current.interact = false;
+      inputRef.current.interact = false;
       inputRef.current.distract = false;
       inputRef.current.pause    = false;
+      inputRef.current.sneak    = false;
     }
 
     window.addEventListener('keydown', onKeyDown);

@@ -1,3 +1,5 @@
+import type { Room } from '../types';
+
 /**
  * AudioSystem — complete procedural Web Audio API stealth synthesizer.
  * Provides rich sound feedback with zero external audio assets.
@@ -6,7 +8,7 @@
 export class AudioSystem {
   private ctx: AudioContext | null = null;
   private isMuted: boolean = false;
-  private lastFootstepTime: number = 0;
+  private footstepNoise: AudioBuffer | null = null;
   private lastHeartbeatTime: number = 0;
 
   private initContext(): AudioContext | null {
@@ -24,8 +26,13 @@ export class AudioSystem {
     return this.ctx;
   }
 
+  unlock(): void {
+    if (!this.isMuted) this.initContext();
+  }
+
   toggleMute(): boolean {
     this.isMuted = !this.isMuted;
+    this.unlock();
     return this.isMuted;
   }
 
@@ -36,14 +43,10 @@ export class AudioSystem {
   /**
    * Soft footstep carpet/floor tap.
    */
-  playFootstep(): void {
+  playFootstep(surface: Room['floorType'], sneaking: boolean): void {
     if (this.isMuted) return;
-    const nowMs = performance.now();
-    if (nowMs - this.lastFootstepTime < 280) return; // Throttle footsteps
-    this.lastFootstepTime = nowMs;
-
     const ctx = this.initContext();
-    if (!ctx) return;
+    if (!ctx || ctx.state !== 'running') return;
 
     try {
       const now = ctx.currentTime;
@@ -51,21 +54,31 @@ export class AudioSystem {
       const gain = ctx.createGain();
       const filter = ctx.createBiquadFilter();
 
+      if (!this.footstepNoise) {
+        this.footstepNoise = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.085), ctx.sampleRate);
+        const samples = this.footstepNoise.getChannelData(0);
+        for (let i = 0; i < samples.length; i++) samples[i] = Math.random() * 2 - 1;
+      }
+      const contact = ctx.createBufferSource();
+      contact.buffer = this.footstepNoise;
+      contact.connect(filter);
+
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(200, now);
+      filter.frequency.setValueAtTime(surface === 'tile' ? 2800 : surface === 'wood' ? 1700 : 1050, now);
 
       osc.type = 'triangle';
-      const freq = 60 + Math.random() * 20;
+      const freq = (surface === 'tile' ? 175 : surface === 'wood' ? 142 : 110) + Math.random() * 18;
       osc.frequency.setValueAtTime(freq, now);
       osc.frequency.exponentialRampToValueAtTime(30, now + 0.05);
 
-      gain.gain.setValueAtTime(0.04, now);
+      gain.gain.setValueAtTime((surface === 'carpet' ? 0.15 : 0.22) * (sneaking ? 0.4 : 1), now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
 
       osc.connect(filter);
       filter.connect(gain);
       gain.connect(ctx.destination);
 
+      contact.start(now);
       osc.start(now);
       osc.stop(now + 0.06);
     } catch {
@@ -169,6 +182,46 @@ export class AudioSystem {
     } catch {
       // Ignore
     }
+  }
+
+  playDistractionImpact(): void {
+    if (this.isMuted) return;
+    const ctx = this.initContext();
+    if (!ctx || ctx.state !== 'running') return;
+
+    const now = ctx.currentTime;
+    const tone = ctx.createOscillator();
+    const gain = ctx.createGain();
+    tone.type = 'triangle';
+    tone.frequency.setValueAtTime(1450, now);
+    tone.frequency.exponentialRampToValueAtTime(610, now + 0.09);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    tone.connect(gain);
+    gain.connect(ctx.destination);
+    tone.start(now);
+    tone.stop(now + 0.13);
+  }
+
+  playAlarmBeep(): void {
+    if (this.isMuted) return;
+    const ctx = this.initContext();
+    if (!ctx || ctx.state !== 'running') return;
+
+    const now = ctx.currentTime;
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(740, now);
+    oscillator.frequency.setValueAtTime(988, now + 0.12);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.26);
   }
 
   /**

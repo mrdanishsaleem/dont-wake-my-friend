@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import { GameCanvas } from './components/GameCanvas';
 import { ObjectivePanel } from './components/ObjectivePanel';
 import { WakeMeter } from './components/WakeMeter';
-import { GameOverlay } from './components/GameOverlay';
 import type { GameControls } from './hooks/useGame';
 import { useGameStore } from './store/gameStore';
 
@@ -19,67 +18,47 @@ export default function App() {
   return (
     <div className="app-wrapper">
 
-      {/* ── Header ───────────────────────────────────────── */}
-      <header className="flex flex-col items-center relative w-full max-w-[960px]">
+      <header className="game-header">
         <h1 className="game-title">Don't Wake My Friend</h1>
-        <p className="game-subtitle">stealth · night · bedroom</p>
-        <div className="absolute left-0 top-1 flex items-center gap-1 text-[0.62rem] font-mono text-slate-400">
-          <span>DIFFICULTY</span>
-          {(['EASY', 'NORMAL', 'HARD'] as const).map((level) => (
-            <button key={level} onClick={() => setDifficulty(level)} className={`px-1.5 py-0.5 rounded border ${difficulty === level ? 'border-sky-400 text-sky-300 bg-sky-950/50' : 'border-slate-800 hover:border-slate-600'}`}>{level}</button>
-          ))}
+        <div className="game-toolbar">
+          <div className="difficulty-control" role="group" aria-label="Difficulty">
+            <span className="difficulty-label">Difficulty</span>
+            {(['EASY', 'NORMAL', 'HARD'] as const).map((level) => (
+              <button key={level} type="button" aria-pressed={difficulty === level} onClick={() => setDifficulty(level)}>
+                {level.toLowerCase()}
+              </button>
+            ))}
+          </div>
+          {gameStatus === 'PLAYING' && (
+            <button type="button" className="pause-button" onClick={() => gameControls?.pause()}>
+              Pause <kbd className="key-badge">Esc</kbd>
+            </button>
+          )}
         </div>
-
-        {/* Top-right Pause button */}
-        {gameStatus === 'PLAYING' && (
-          <button
-            onClick={() => gameControls?.pause()}
-            className="absolute right-0 top-1 px-2.5 py-1 text-xs font-mono rounded border border-slate-700 bg-slate-900/80 text-slate-300 hover:text-white hover:border-slate-500 transition-colors flex items-center gap-1.5"
-            title="Pause Game (ESC)"
-          >
-            <span className="key-badge !py-0 !px-1">ESC</span>
-            <span>PAUSE</span>
-          </button>
-        )}
       </header>
 
       {/* ── Canvas area ──────────────────────────────────── */}
-      <main>
-        <div className="canvas-wrapper relative" role="region" aria-label="Game area">
-          <GameCanvas onGameReady={handleGameReady} />
-          {/* Game States & End Screens Overlay */}
-          <GameOverlay controls={gameControls} />
-        </div>
+      <main className="game-main">
+        <GameCanvas onGameReady={handleGameReady} />
 
-        {/* ── Info row ─────────────────────────────────────── */}
-        <div className="info-row">
-
-          {/* 1. Objective & Mission */}
+        <aside className="info-row" aria-label="Mission and controls">
           <ObjectivePanel onRestart={gameControls?.restart} />
-
-          {/* 2. Wake Meter */}
-          <WakeMeter onRestart={gameControls?.restart} />
-
-          {/* 3. Controls */}
-          <div className="panel controls-panel">
-            <p className="panel-label">Controls</p>
-            <p className="panel-value">
-              <span className="key-badge">W</span>
-              <span className="key-badge">A</span>
-              <span className="key-badge">S</span>
-              <span className="key-badge">D</span>
-              <span className="text-[0.65rem] text-slate-400 ml-1">Move</span>
-              <br />
-              <span className="key-badge">E</span>
-              <span className="text-[0.65rem] text-sky-300 ml-1 mr-2">Interact</span>
-              <span className="key-badge">F</span>
-              <span className="text-[0.65rem] text-amber-300 ml-1 mr-2">Throw</span>
-              <span className="key-badge">ESC</span>
-              <span className="text-[0.65rem] text-slate-400 ml-1">Pause</span>
-            </p>
-          </div>
-
-        </div>
+          <WakeMeter />
+          <section className="panel controls-panel" aria-label="Keyboard controls">
+            <h2 className="panel-label">Controls</h2>
+            <dl className="controls-list">
+              {[
+                ['W A S D', 'Move'],
+                ['Shift', 'Sneak'],
+                ['E', 'Interact'],
+                ['F', 'Toss coin'],
+                ['Esc', 'Pause'],
+              ].map(([keys, action]) => (
+                <div key={action}><dt>{action}</dt><dd><kbd className="key-badge">{keys}</kbd></dd></div>
+              ))}
+            </dl>
+          </section>
+        </aside>
       </main>
 
     </div>

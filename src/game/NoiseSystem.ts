@@ -81,31 +81,16 @@ export class NoiseSystem {
     const cutoff = timestamp - 4000;
     this.recentEvents = this.recentEvents.filter((e) => e.timestamp >= cutoff);
 
-    // 2. Continuous noise generation from player movement
-    let baseNoiseRate = 0;
-    if (player.moving) {
-      // Normal walk noise (or higher if fast)
-      baseNoiseRate = this.config.walkNoiseRate;
-      this.totalNoiseGenerated += baseNoiseRate * dt;
-    }
+    this.currentNoiseRate = player.moving
+      ? this.config.walkNoiseRate * (player.sneaking ? 0.35 : 1)
+      : 0;
+    return player.moving ? 0 : -this.config.decayRate * dt;
+  }
 
-    this.currentNoiseRate = baseNoiseRate;
-
-    // 3. Apply distance attenuation
-    const playerCenter: Vec2 = {
-      x: player.x + player.w / 2,
-      y: player.y + player.h / 2,
-    };
-    const distanceMult = this.getDistanceMultiplier(playerCenter);
-    const effectiveNoiseRate = baseNoiseRate * distanceMult;
-
-    // 4. Calculate effective delta for wake system
-    if (player.moving && effectiveNoiseRate > 0) {
-      return effectiveNoiseRate * dt;
-    } else {
-      // Decay when player is quiet
-      return -this.config.decayRate * dt;
-    }
+  emitFootstep(player: PlayerState, position: Vec2, timestamp: number): number {
+    const amount = this.config.walkNoiseRate * 9 * (player.sneaking ? 0.35 : 1);
+    this.emitNoise(amount, position, 'walking', timestamp);
+    return amount * this.getDistanceMultiplier(position);
   }
 
   getCurrentNoiseRate(): number {

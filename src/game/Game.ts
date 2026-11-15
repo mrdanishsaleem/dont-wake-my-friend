@@ -1,4 +1,4 @@
-import type { Room, RenderState, InputState, Vec2, Difficulty, Mission } from '../types';
+import type { Room, RenderState, InputState, TouchInput, Vec2, Difficulty, Mission, DistractionThrow } from '../types';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../types';
 import { BEDROOM, ROOMS }      from '../data/room';
 import { AVAILABLE_MISSIONS }  from '../data/missions';
@@ -9,7 +9,7 @@ import { FriendAI }            from './FriendAI';
 import { InteractionSystem }   from './InteractionSystem';
 import { MissionSystem }       from './MissionSystem';
 import { sound }               from './AudioSystem';
-import { drawRoom }            from './renderer/drawRoom';
+import { drawRoom, drawRoomLighting }            from './renderer/drawRoom';
 import { drawFurniture }       from './renderer/drawFurniture';
 import { drawFriend }          from './renderer/drawFriend';
 import { drawPlayer }          from './renderer/drawPlayer';
@@ -19,6 +19,10 @@ import { useGameStore }        from '../store/gameStore';
 
 /** Development flag: set to true to display bounding boxes and collision hitboxes. */
 export const DEBUG_COLLISION = false;
+
+const MAX_FRAME_SECONDS = 0.1;
+const ALARM_WAKE_PER_SECOND = 7;
+const ALARM_BEEP_INTERVAL = 1.2;
 
 /**
  * Game — coordinates rendering, screen effects, procedural audio, and game state.
@@ -32,6 +36,7 @@ export class Game {
   private friendAI:            FriendAI;
   private interactionSystem:   InteractionSystem;
   private missionSystem:       MissionSystem;
+  private readonly touchInput?: { current: TouchInput };
   private inputRef:            { current: InputState };
   private friendHeadPos:       Vec2;
   private rafId:               number  = 0;
@@ -43,21 +48,27 @@ export class Game {
 
   // Screen shake & visual effects
   private shakeIntensity:      number  = 0;
+  private appliedDifficulty: Difficulty | undefined;
+  private timeUntilAlarmBeep = 0;
+  private timeUntilFootstep = 0;
+  private distraction: DistractionThrow | null = null;
   private lastWakeTier:        number  = 0;
 
   constructor(
     ctx:      CanvasRenderingContext2D,
     inputRef: { current: InputState },
+    touchInput?: { current: TouchInput },
   ) {
     this.ctx      = ctx;
     this.room     = JSON.parse(JSON.stringify(BEDROOM)) as Room;
     this.inputRef = inputRef;
+    this.touchInput = touchInput;
 
-    this.player = new Player(100, 420);
+    this.player = new Player(73, 420);
 
     const bed = this.room.objects.find((o) => o.id === 'bed-main');
     this.friendHeadPos = bed
-      ? { x: bed.bounds.x + bed.bounds.w - 40, y: bed.bounds.y + bed.bounds.h * 0.36 }
+      ? { x: bed.bounds.x + bed.bounds.w * 0.923, y: bed.bounds.y + bed.bounds.h * 0.36 }
       : { x: 890, y: 115 };
 
     this.noiseSystem       = new NoiseSystem(this.friendHeadPos);
@@ -77,7 +88,7 @@ export class Game {
     if (!target) return;
     const labels: Record<string, string> = { 'decor-glass': 'Glass of Water', 'decor-charger': 'Phone Charger', 'decor-headphones': 'Headphones', 'decor-snacks': 'Snacks', 'decor-phone': 'Alarm Phone', 'decor-keys': 'Keys', 'door-main': 'Bedroom Door' };
     const risks: Record<string, number> = { 'decor-glass': 10, 'decor-charger': 6, 'decor-headphones': 4, 'decor-snacks': 9, 'decor-phone': 14, 'decor-keys': 16, 'door-main': 12 };
-    this.interactionSystem.register({ id: target.id, name: labels[target.id] ?? 'Mission Item', x: target.bounds.x + target.bounds.w / 2, y: target.bounds.y + target.bounds.h / 2, radius: 65, promptText: `Get ${labels[target.id] ?? 'item'}`, noiseAmount: risks[target.id] ?? 8, active: true });
+    this.interactionSystem.register({ id: target.id, name: labels[target.id] ?? 'Mission Item', x: target.bounds.x + target.bounds.w / 2, y: target.bounds.y + target.bounds.h / 2, radius: 33, promptText: target.id === 'decor-phone' ? 'Silence Alarm' : `Get ${labels[target.id] ?? 'item'}`, noiseAmount: risks[target.id] ?? 8, active: true });
   }
 
   private applyDifficulty(difficulty: Difficulty): void {
@@ -85,16 +96,14 @@ export class Game {
     const floorMultiplier = this.room.floorType === 'carpet' ? 0.5 : this.room.floorType === 'tile' ? 1.55 : 1;
     const [noise, recovery] = difficultySettings[difficulty];
     this.noiseSystem.setDifficulty(noise * floorMultiplier, recovery);
+    this.appliedDifficulty = difficulty;
   }
 
   private setMissionForRun(): void {
     const mission = AVAILABLE_MISSIONS[Math.floor(Math.random() * AVAILABLE_MISSIONS.length)] as Mission;
     const roomKey = mission.id === 'mission-snacks' ? 'kitchen' : mission.id === 'mission-alarm' ? 'bathroom' : mission.id === 'mission-keys' ? 'hallway' : mission.id === 'mission-headphones' ? 'livingRoom' : 'bedroom';
     this.room = JSON.parse(JSON.stringify(ROOMS[roomKey] ?? BEDROOM)) as Room;
-    if (mission.id === 'mission-charger') this.room.objects.push({ id: 'decor-charger', kind: 'decor', bounds: { x: 118 + Math.floor(Math.random() * 70), y: 286, w: 20, h: 18 }, solid: false, interact: true, meta: { type: 'charger' } });
-    // Small safe variation makes routes feel fresh without moving a target into danger.
-    const target = mission.target && this.room.objects.find((item) => item.id === mission.target);
-    if (target && target.id !== 'door-main') target.bounds.x += (Math.floor(Math.random() * 3) - 1) * 28;
+    if (mission.id === 'mission-charger') this.room.objects.push({ id: 'decor-charger', kind: 'decor', bounds: { x: 265, y: 375, w: 26, h: 25 }, solid: false, interact: true, meta: { type: 'charger' } });
     this.missionSystem.startMission(mission);
     this.applyDifficulty(useGameStore.getState().difficulty);
   }
@@ -129,17 +138,21 @@ export class Game {
   }
 
   restart(): void {
-    this.player.state.x = 100;
+    this.player.state.x = 73;
     this.player.state.y = 420;
     this.player.state.vx = 0;
     this.player.state.vy = 0;
     this.player.state.facing = 'down';
     this.player.state.moving = false;
+    this.player.state.sneaking = false;
 
     this.setMissionForRun();
 
     this.shakeIntensity = 0;
     this.lastWakeTier = 0;
+    this.timeUntilAlarmBeep = 0;
+    this.timeUntilFootstep = 0;
+    this.distraction = null;
 
     this.noiseSystem.reset();
     this.wakeSystem.reset();
@@ -155,7 +168,7 @@ export class Game {
   private loop = (timestamp: number): void => {
     if (!this.running) return;
 
-    const dt = (timestamp - this.lastTime) / 1000;
+    const dt = Math.max(0, Math.min(MAX_FRAME_SECONDS, (timestamp - this.lastTime) / 1000));
     this.lastTime = timestamp;
 
     this.update(dt, timestamp);
@@ -186,11 +199,26 @@ export class Game {
 
     // 3. If actively playing, process gameplay
     if (gameStatus === 'PLAYING') {
-      this.player.update(dt, this.inputRef.current, this.room);
+      const { difficulty } = useGameStore.getState();
+      if (this.appliedDifficulty !== difficulty) this.applyDifficulty(difficulty);
 
-      // Play soft footstep procedural audio while moving
-      if (this.player.state.moving) {
-        sound.playFootstep();
+      const keyboard = this.inputRef.current;
+      const touch = this.touchInput?.current;
+      const directions = touch?.directions;
+      this.player.update(dt, {
+        ...keyboard,
+        up: keyboard.up || !!directions?.has('up'),
+        down: keyboard.down || !!directions?.has('down'),
+        left: keyboard.left || !!directions?.has('left'),
+        right: keyboard.right || !!directions?.has('right'),
+        sneak: keyboard.sneak || touch?.sneak,
+      }, this.room);
+
+      const touchInteract = touch?.interact;
+      const touchDistract = touch?.distract;
+      if (touch) {
+        touch.interact = false;
+        touch.distract = false;
       }
 
       const playerCenter: Vec2 = {
@@ -198,22 +226,52 @@ export class Game {
         y: this.player.state.y + this.player.state.h / 2,
       };
 
+      if (this.player.state.moving) {
+        this.timeUntilFootstep -= dt;
+        if (this.timeUntilFootstep <= 0) {
+          const sneaking = this.player.state.sneaking ?? false;
+          this.timeUntilFootstep += sneaking ? 0.44 : 0.28;
+          sound.playFootstep(this.room.floorType, sneaking);
+          this.wakeSystem.update(this.noiseSystem.emitFootstep(this.player.state, playerCenter, timestamp));
+        }
+      } else {
+        this.timeUntilFootstep = 0;
+      }
+
       this.interactionSystem.update(dt, playerCenter, timestamp);
+
+      this.updateDistraction(dt, timestamp);
 
       // Handle interaction input
       const isInteractHeld = this.inputRef.current.interact;
-      if (isInteractHeld && !this.lastInteractPressed) {
+      if ((touchInteract || (isInteractHeld && !this.lastInteractPressed)) && !this.wakeSystem.getIsGameOver()) {
         this.handleInteraction(timestamp);
       }
       this.lastInteractPressed = isInteractHeld;
 
       const isDistractHeld = this.inputRef.current.distract;
-      if (isDistractHeld && !this.lastDistractPressed) this.throwDistraction(timestamp);
+      if (
+        (touchDistract || (isDistractHeld && !this.lastDistractPressed)) &&
+        this.missionSystem.getGameStatus() === 'PLAYING' && !this.wakeSystem.getIsGameOver()
+      ) {
+        this.throwDistraction();
+      }
       this.lastDistractPressed = isDistractHeld;
 
       // Update noise & wake decay
       const wakeDelta = this.noiseSystem.update(dt, this.player.state, timestamp);
-      this.wakeSystem.update(wakeDelta);
+      if (this.missionSystem.getGameStatus() === 'PLAYING') {
+        const alarmRinging = this.missionSystem.getCurrentMission()?.id === 'mission-alarm';
+        this.wakeSystem.update(wakeDelta + (alarmRinging ? ALARM_WAKE_PER_SECOND * dt : 0));
+
+        if (alarmRinging && !this.wakeSystem.getIsGameOver()) {
+          this.timeUntilAlarmBeep -= dt;
+          if (this.timeUntilAlarmBeep <= 0) {
+            sound.playAlarmBeep();
+            this.timeUntilAlarmBeep += ALARM_BEEP_INTERVAL;
+          }
+        }
+      }
 
       // Audio sting on wake tier increase
       const wakeLvl = this.wakeSystem.getWakeLevel();
@@ -321,15 +379,47 @@ export class Game {
     }
   }
 
-  private throwDistraction(timestamp: number): void {
+  private throwDistraction(): void {
+    if (this.distraction) return;
+
     const player = this.player.state;
     const origin = { x: player.x + player.w / 2, y: player.y + player.h / 2 };
-    const direction = player.facing === 'up' ? [0, -1] : player.facing === 'down' ? [0, 1] : player.facing === 'left' ? [-1, 0] : [1, 0];
-    const landing = { x: Math.max(40, Math.min(CANVAS_WIDTH - 40, origin.x + direction[0] * 170)), y: Math.max(45, Math.min(CANVAS_HEIGHT - 40, origin.y + direction[1] * 170)) };
+    const directions: Record<typeof player.facing, Vec2> = {
+      up: { x: 0, y: -1 }, down: { x: 0, y: 1 },
+      left: { x: -1, y: 0 }, right: { x: 1, y: 0 },
+    };
+    const direction = directions[player.facing];
+    let landing = origin;
+    const obstacles = this.room.objects.filter((object) => object.solid);
+
+    // Stop at the first obstacle along the throw path.
+    for (let distance = 4; distance <= 168; distance += 4) {
+      const x = origin.x + direction.x * distance;
+      const y = origin.y + direction.y * distance;
+      if (x < 4 || x > CANVAS_WIDTH - 4 || y < 4 || y > CANVAS_HEIGHT - 4) break;
+      if (obstacles.some(({ bounds: b }) => x >= b.x - 3 && x <= b.x + b.w + 3 &&
+        y >= b.y - 3 && y <= b.y + b.h + 3)) break;
+      landing = { x, y };
+    }
+
+    const distance = Math.hypot(landing.x - origin.x, landing.y - origin.y);
+    this.distraction = { origin, landing, elapsed: 0, duration: 0.16 + distance / 740 };
+  }
+
+  private updateDistraction(dt: number, timestamp: number): void {
+    const distraction = this.distraction;
+    if (!distraction) return;
+
+    distraction.elapsed += dt;
+    if (distraction.elapsed < distraction.duration) return;
+
+    const { landing } = distraction;
     const noise = 11;
+    this.distraction = null;
     this.noiseSystem.emitNoise(noise, landing, 'distraction', timestamp);
     this.wakeSystem.update(noise * this.noiseSystem.getDistanceMultiplier(landing));
-    this.interactionSystem.addEffect(landing.x, landing.y, timestamp, 'DISTRACTION');
+    this.interactionSystem.addEffect(landing.x, landing.y, timestamp, 'Clink');
+    sound.playDistractionImpact();
   }
 
   // ── Render ───────────────────────────────────────────────
@@ -337,15 +427,9 @@ export class Game {
   private render(timestamp: number): void {
     const { ctx, room } = this;
 
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    // Apply Screen Shake if active
-    ctx.save();
-    if (this.shakeIntensity > 0) {
-      const sx = (Math.random() - 0.5) * this.shakeIntensity;
-      const sy = (Math.random() - 0.5) * this.shakeIntensity;
-      ctx.translate(sx, sy);
-    }
+    // Keep the room fixed against the frame. Shake the player on impact.
+    const shakeX = (Math.random() - 0.5) * this.shakeIntensity;
+    const shakeY = (Math.random() - 0.5) * this.shakeIntensity;
 
     const wakeData = this.wakeSystem.getData(
       this.noiseSystem.getCurrentNoiseRate(),
@@ -363,6 +447,7 @@ export class Game {
       friendAI: this.friendAI.getState(),
       nearbyInteractable: gameStatus === 'PLAYING' ? nearbyInteractable : null,
       interactionEffects,
+      distraction: this.distraction,
       gameStatus,
       currentMission: this.missionSystem.getCurrentMission(),
     };
@@ -371,12 +456,15 @@ export class Game {
     drawRoom(ctx, room, timestamp);
     drawFurniture(ctx, room);
     drawFriend(ctx, room, state);
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
     drawPlayer(ctx, state);
+    ctx.restore();
+    drawRoomLighting(ctx, room);
 
     // 2. Interaction prompts & effects (when playing)
     if (gameStatus === 'PLAYING') {
-      drawInteraction(ctx, state, this.friendHeadPos);
-      this.drawDangerEffects(ctx, wakeData.wakeLevel, timestamp);
+      drawInteraction(ctx, state);
     }
 
     // 3. Optional collision debug overlay
@@ -384,45 +472,5 @@ export class Game {
       drawDebugCollision(ctx, room, this.player.state);
     }
 
-    ctx.restore();
-  }
-
-  // ── Visual feedback overlays (vignette & heartbeat border) ──
-
-  private drawDangerEffects(ctx: CanvasRenderingContext2D, wakeLevel: number, timestamp: number): void {
-    if (wakeLevel < 70) return;
-
-    ctx.save();
-    if (wakeLevel >= 90) {
-      // Urgent pulsing red heartbeat vignette
-      const pulse = 0.35 + Math.sin(timestamp * 0.01) * 0.18;
-      ctx.strokeStyle = `rgba(239, 68, 68, ${pulse})`;
-      ctx.lineWidth = 14;
-      ctx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-      // Dark red corner vignettes
-      const vig = ctx.createRadialGradient(
-        CANVAS_WIDTH / 2,
-        CANVAS_HEIGHT / 2,
-        CANVAS_WIDTH * 0.3,
-        CANVAS_WIDTH / 2,
-        CANVAS_HEIGHT / 2,
-        CANVAS_WIDTH * 0.55,
-      );
-      vig.addColorStop(0, 'rgba(0,0,0,0)');
-      vig.addColorStop(1, `rgba(220, 38, 38, ${pulse * 0.35})`);
-      ctx.fillStyle = vig;
-      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    } else if (wakeLevel >= 85) {
-      const pulse = 0.2 + Math.sin(timestamp * 0.006) * 0.12;
-      ctx.strokeStyle = `rgba(249, 115, 22, ${pulse})`;
-      ctx.lineWidth = 8;
-      ctx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    } else if (wakeLevel >= 70) {
-      ctx.strokeStyle = 'rgba(251, 191, 36, 0.15)';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    }
-    ctx.restore();
   }
 }

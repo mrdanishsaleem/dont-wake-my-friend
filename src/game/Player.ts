@@ -55,7 +55,7 @@ export class Player {
     if (input.up)    dy -= 1;
     if (input.down)  dy += 1;
 
-    state.moving = dx !== 0 || dy !== 0;
+    state.sneaking = input.sneak ?? false;
 
     // ── Normalise diagonal movement ───────────────────────────────────
     if (dx !== 0 && dy !== 0) {
@@ -64,8 +64,9 @@ export class Player {
     }
 
     // ── Compute velocity ──────────────────────────────────────────────
-    state.vx = dx * state.speed;
-    state.vy = dy * state.speed;
+    const speed = state.speed * (state.sneaking ? 0.52 : 1);
+    state.vx = dx * speed;
+    state.vy = dy * speed;
 
     // ── Update facing direction ───────────────────────────────────────
     // Prefer cardinal directions; last pressed wins for diagonals.
@@ -81,5 +82,6 @@ export class Player {
     // ── Hard canvas boundary clamp (safety net) ───────────────────────
     state.x = clamp(state.x, 0, CANVAS_WIDTH  - state.w);
     state.y = clamp(state.y, 0, CANVAS_HEIGHT - state.h);
+    state.moving = state.vx !== 0 || state.vy !== 0;
   }
 }

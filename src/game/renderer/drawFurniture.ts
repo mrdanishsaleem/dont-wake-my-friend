@@ -1,3 +1,5 @@
+import furnitureUrl from '../../assets/furniture-sprites.png';
+import missionItemsUrl from '../../assets/mission-items.png';
 /**
  * drawFurniture — renders all bedroom furniture and decorative objects.
  *
@@ -47,9 +49,9 @@ const C = {
   monitorGlow:  'rgba(80,140,200,0.06)',
 
   // Chair
-  chairSeat:    '#201c34',
-  chairBack:    '#1a182e',
-  chairEdge:    '#2e2a48',
+  chairSeat:    '#524d43',
+  chairBack:    '#403a32',
+  chairEdge:    '#60564b',
   chairLeg:     '#14101e',
 
   // Bookshelf
@@ -61,27 +63,49 @@ const C = {
   book4:        '#2e2040',
 
   // Rug
-  rugBase:      '#16212e',
-  rugBorder:    '#1d2e42',
-  rugPattern:   '#1a2838',
+  rugBase:      '#52473d',
+  rugBorder:    '#6a594a',
+  rugPattern:   '#5b4c41',
 
   // Plant
-  pot:          '#1e1830',
-  potEdge:      '#2c2446',
-  leaf:         '#1a2e22',
-  leafHi:       '#22382a',
+  pot:          '#50413a',
+  potEdge:      '#6a5245',
+  leaf:         '#384b2c',
+  leafHi:       '#607047',
 
-  // Water glass
-  glass:        'rgba(160,200,240,0.18)',
-  glassEdge:    'rgba(160,200,240,0.35)',
-  water:        'rgba(100,160,220,0.22)',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+const furniture = new Image();
+furniture.src = furnitureUrl;
+
+// Normalized bounds of the four cutouts in the atlas.
+const furnitureCrops = new Map<Room['objects'][number]['kind'], Rect>([
+  ['bed', { x: 0.024, y: 0.068, w: 0.447, h: 0.393 }],
+  ['nightstand', { x: 0.578, y: 0.106, w: 0.303, h: 0.32 }],
+  ['desk', { x: 0.023, y: 0.565, w: 0.446, h: 0.329 }],
+  ['bookshelf', { x: 0.5, y: 0.623, w: 0.464, h: 0.238 }],
+]);
+
 export function drawFurniture(ctx: Ctx, room: Room): void {
   for (const obj of room.objects) {
     const b = obj.bounds;
+    const crop = furnitureCrops.get(obj.kind);
+    if (crop && furniture.naturalWidth) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+      ctx.shadowBlur = 13;
+      ctx.shadowOffsetY = 6;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(
+        furniture, crop.x * furniture.naturalWidth, crop.y * furniture.naturalHeight,
+        crop.w * furniture.naturalWidth, crop.h * furniture.naturalHeight,
+        b.x, b.y, b.w, b.h,
+      );
+      ctx.restore();
+      continue;
+    }
     switch (obj.kind) {
       case 'rug':         drawRug(ctx, b);      break;
       case 'bed':         drawBed(ctx, b);       break;
@@ -91,22 +115,45 @@ export function drawFurniture(ctx: Ctx, room: Room): void {
       case 'bookshelf':   drawBookshelf(ctx, b);  break;
       case 'decor':
         if (obj.meta?.type === 'plant') drawPlant(ctx, b);
-        if (obj.meta?.type === 'glass' && !obj.meta?.collected) drawGlass(ctx, b);
-        if (obj.meta?.type && obj.meta.type !== 'plant' && obj.meta.type !== 'glass' && !obj.meta?.collected) drawMissionItem(ctx, b, String(obj.meta.type));
+        else if (typeof obj.meta?.type === 'string' && !obj.meta.collected) drawMissionItem(ctx, b, obj.meta.type);
         break;
     }
   }
 }
 
+const missionItems = new Image();
+missionItems.src = missionItemsUrl;
+
+// Tight crops in the original 1536 × 1024 atlas.
+const itemCrops = new Map([
+  ['glass', { x: 114, y: 66, w: 300, h: 419 }],
+  ['charger', { x: 541, y: 95, w: 407, h: 382 }],
+  ['headphones', { x: 1054, y: 62, w: 409, h: 433 }],
+  ['snacks', { x: 91, y: 561, w: 346, h: 411 }],
+  ['phone', { x: 625, y: 542, w: 265, h: 445 }],
+  ['keys', { x: 1140, y: 556, w: 295, h: 410 }],
+]);
+
 function drawMissionItem(ctx: Ctx, b: Rect, type: string): void {
-  const icon: Record<string, string> = { charger: '🔌', headphones: '🎧', snacks: '🍪', phone: '📱', keys: '🔑' };
+  const crop = itemCrops.get(type);
+  if (!crop || !missionItems.naturalWidth) return;
+
+  const sourceScaleX = missionItems.naturalWidth / 1536;
+  const sourceScaleY = missionItems.naturalHeight / 1024;
+  const scale = Math.min(b.w / crop.w, b.h / crop.h);
+  const width = crop.w * scale;
+  const height = crop.h * scale;
+
   ctx.save();
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-  ctx.fillRect(b.x - 3, b.y - 3, b.w + 6, b.h + 6);
-  ctx.font = '18px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(icon[type] ?? '•', b.x + b.w / 2, b.y + b.h / 2 + 1);
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetY = 2;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(
+    missionItems, crop.x * sourceScaleX, crop.y * sourceScaleY,
+    crop.w * sourceScaleX, crop.h * sourceScaleY,
+    b.x + (b.w - width) / 2, b.y + (b.h - height) / 2, width, height,
+  );
   ctx.restore();
 }
 
@@ -433,42 +480,4 @@ function drawPlant(ctx: Ctx, b: Rect): void {
     ctx.stroke();
     ctx.restore();
   }
-}
-
-// ── Water glass ───────────────────────────────────────────────────────────────
-
-function drawGlass(ctx: Ctx, b: Rect): void {
-  // Glass body (trapezoid)
-  ctx.fillStyle = C.glass;
-  ctx.beginPath();
-  ctx.moveTo(b.x + 2,       b.y);
-  ctx.lineTo(b.x + b.w - 2, b.y);
-  ctx.lineTo(b.x + b.w,     b.y + b.h);
-  ctx.lineTo(b.x,            b.y + b.h);
-  ctx.closePath();
-  ctx.fill();
-
-  // Rim
-  ctx.strokeStyle = C.glassEdge;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Water level fill
-  const waterY = b.y + b.h * 0.35;
-  ctx.fillStyle = C.water;
-  ctx.beginPath();
-  ctx.moveTo(b.x + 2,       waterY);
-  ctx.lineTo(b.x + b.w - 2, waterY);
-  ctx.lineTo(b.x + b.w,     b.y + b.h);
-  ctx.lineTo(b.x,            b.y + b.h);
-  ctx.closePath();
-  ctx.fill();
-
-  // Glass highlight line
-  ctx.strokeStyle = 'rgba(180,220,255,0.3)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(b.x + 3, b.y + 2);
-  ctx.lineTo(b.x + 3, b.y + b.h - 2);
-  ctx.stroke();
 }

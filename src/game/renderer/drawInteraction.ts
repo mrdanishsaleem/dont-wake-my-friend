@@ -1,73 +1,35 @@
 /**
- * drawInteraction — renders interaction prompts, beacons, noise indicators, and proximity hazard warnings.
+ * drawInteraction — renders interaction prompts, thrown coins, and noise indicators.
  */
 
-import type { RenderState, Vec2 } from '../../types';
+import type { DistractionThrow, RenderState } from '../../types';
+import { CANVAS_WIDTH } from '../../types';
 import { fillRoundRect } from './drawPrimitives';
 
 type Ctx = CanvasRenderingContext2D;
 
-export function drawInteraction(ctx: Ctx, state: RenderState, friendPos?: Vec2): void {
-  const { timestamp, player, nearbyInteractable, interactionEffects } = state;
+export function drawInteraction(ctx: Ctx, state: RenderState): void {
+  const { timestamp, nearbyInteractable, interactionEffects } = state;
 
-  // 1. Proximity hazard warning near sleeping friend
-  if (friendPos) {
-    drawProximityHazard(ctx, player, friendPos, timestamp);
-  }
-
-  // 2. Nearby interactable beacon & prompt
+  // Nearby interactable beacon & prompt
   if (nearbyInteractable) {
     drawInteractableBeacon(ctx, nearbyInteractable.x, nearbyInteractable.y, timestamp);
     drawInteractionPrompt(
       ctx,
       nearbyInteractable.x,
       nearbyInteractable.y - 28,
-      nearbyInteractable.promptText || 'Press E to interact',
+      nearbyInteractable.promptText || 'Interact',
       timestamp,
     );
   }
 
-  // 3. Active interaction & noise visual effects (ripples, floating noise labels)
+  if (state.distraction) drawThrownCoin(ctx, state.distraction);
+
+  // Active interaction & noise visual effects (ripples, floating noise labels)
   if (interactionEffects && interactionEffects.length > 0) {
     for (const effect of interactionEffects) {
       drawEffect(ctx, effect, timestamp);
     }
-  }
-}
-
-function drawProximityHazard(ctx: Ctx, player: RenderState['player'], friendPos: Vec2, timestamp: number): void {
-  const px = player.x + player.w / 2;
-  const py = player.y + player.h / 2;
-  const dist = Math.hypot(px - friendPos.x, py - friendPos.y);
-
-  if (dist < 230) {
-    const isVeryClose = dist < 140;
-    const pulse = 1 + Math.sin(timestamp * 0.008) * 0.08;
-    const alpha = Math.min(0.8, (230 - dist) / 140);
-
-    ctx.save();
-    ctx.globalAlpha = alpha;
-
-    // Subtle dashed danger arc around bed
-    ctx.strokeStyle = isVeryClose ? 'rgba(239, 68, 68, 0.4)' : 'rgba(251, 191, 36, 0.25)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([6, 6]);
-    ctx.beginPath();
-    ctx.arc(friendPos.x, friendPos.y, 140 * pulse, Math.PI * 0.5, Math.PI * 1.5);
-    ctx.stroke();
-
-    // Floating hazard badge above player
-    if (isVeryClose) {
-      ctx.setLineDash([]);
-      ctx.font = 'bold 9px "Space Mono", monospace';
-      ctx.fillStyle = '#f87171';
-      ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
-      ctx.shadowBlur = 6;
-      ctx.textAlign = 'center';
-      ctx.fillText('⚠️ 2x NOISE ZONE', px, player.y - 12);
-    }
-
-    ctx.restore();
   }
 }
 
@@ -76,14 +38,14 @@ function drawInteractableBeacon(ctx: Ctx, x: number, y: number, timestamp: numbe
   const radius = 16 * pulse;
 
   ctx.save();
-  ctx.strokeStyle = 'rgba(125, 211, 252, 0.6)';
+  ctx.strokeStyle = 'rgba(228, 189, 136, 0.68)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.stroke();
 
   // Subtle inner glow
-  ctx.fillStyle = 'rgba(125, 211, 252, 0.12)';
+  ctx.fillStyle = 'rgba(228, 189, 136, 0.08)';
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fill();
@@ -102,50 +64,84 @@ function drawInteractionPrompt(
   const bob = Math.sin(timestamp * 0.006) * 2;
   const py = y + bob;
 
-  ctx.font = 'bold 11px "Space Mono", monospace';
+  ctx.font = '600 13px "Inter", system-ui, sans-serif';
   const textWidth = ctx.measureText(text).width;
   const padX = 8;
-  const boxW = textWidth + padX * 2 + 18;
-  const boxH = 22;
-  const boxX = x - boxW / 2;
+  const boxW = textWidth + padX * 2 + 26;
+  const boxH = 28;
+  const boxX = Math.max(6, Math.min(x - boxW / 2, CANVAS_WIDTH - boxW - 6));
   const boxY = py - boxH / 2;
 
   ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
   ctx.shadowBlur = 8;
   ctx.shadowOffsetY = 2;
-  fillRoundRect(ctx, boxX, boxY, boxW, boxH, 4, '#111827');
+  fillRoundRect(ctx, boxX, boxY, boxW, boxH, 6, '#191d1d');
 
-  ctx.strokeStyle = '#38bdf8';
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = '#686052';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(boxX, boxY, boxW, boxH, 4);
+  ctx.roundRect(boxX, boxY, boxW, boxH, 6);
   ctx.stroke();
 
   // [E] Key badge
-  const badgeW = 14;
-  const badgeH = 14;
+  const badgeW = 18;
+  const badgeH = 18;
   const badgeX = boxX + padX;
   const badgeY = boxY + (boxH - badgeH) / 2;
 
-  fillRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, 2, '#1e293b');
-  ctx.strokeStyle = '#7dd3fc';
+  fillRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, 2, '#332c24');
+  ctx.strokeStyle = '#e4bd88';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 2);
   ctx.stroke();
 
-  ctx.fillStyle = '#7dd3fc';
+  ctx.fillStyle = '#e4bd88';
   ctx.font = 'bold 9px "Space Mono", monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('E', badgeX + badgeW / 2, badgeY + badgeH / 2 + 0.5);
 
   ctx.fillStyle = '#f8fafc';
-  ctx.font = '500 11px "Inter", system-ui, sans-serif';
+  ctx.font = '600 13px "Inter", system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(text, badgeX + badgeW + 6, py);
 
+  ctx.restore();
+}
+
+function drawThrownCoin(ctx: Ctx, { origin, landing, elapsed, duration }: DistractionThrow): void {
+  const progress = Math.min(1, elapsed / duration);
+  const arc = Math.sin(progress * Math.PI);
+  const x = origin.x + (landing.x - origin.x) * progress;
+  const y = origin.y + (landing.y - origin.y) * progress;
+
+  ctx.save();
+  ctx.fillStyle = `rgba(0, 0, 0, ${0.48 - arc * 0.28})`;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 5, 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.translate(x, y - (1 - progress) * 14 - arc * 21);
+  ctx.rotate(progress * Math.PI * 0.8);
+  ctx.scale(1, 0.23 + Math.abs(Math.cos(progress * Math.PI * 5)) * 0.77);
+  const metal = ctx.createLinearGradient(-5, -4, 5, 4);
+  metal.addColorStop(0, '#fff1bf');
+  metal.addColorStop(0.42, '#c6a36b');
+  metal.addColorStop(1, '#725339');
+  ctx.fillStyle = metal;
+  ctx.strokeStyle = '#62472d';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = '#eed29d';
+  ctx.beginPath();
+  ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -176,7 +172,7 @@ function drawEffect(
     ctx.shadowColor = 'rgba(239, 68, 68, 0.9)';
     ctx.shadowBlur = 8;
     ctx.textAlign = 'center';
-    ctx.fillText(`🔊 ${effect.text}`, effect.x, floatY);
+    ctx.fillText(effect.text, effect.x, floatY);
   }
 
   ctx.restore();

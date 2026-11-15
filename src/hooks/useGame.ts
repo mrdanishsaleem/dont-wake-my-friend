@@ -1,8 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Game } from '../game/Game';
 import { useGameStore } from '../store/gameStore';
+import type { TouchInput } from '../types';
 import { useKeyboard } from './useKeyboard';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../types';
 
 export interface GameControls {
   restart: () => void;
@@ -21,6 +21,13 @@ export function useGame() {
 
   // Keyboard state — a ref, not React state, so no re-renders
   const inputRef = useKeyboard();
+  const touchInput = useRef<TouchInput>({
+    directions: new Set(), sneak: false, interact: false, distract: false,
+  });
+
+  const updateTouch = useCallback((update: (input: TouchInput) => void) => {
+    update(touchInput.current);
+  }, []);
 
   const restart = useCallback(() => {
     gameRef.current?.restart();
@@ -42,17 +49,13 @@ export function useGame() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Set the logical (internal) resolution
-    canvas.width  = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
-
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       console.error('[useGame] Could not obtain 2D context.');
       return;
     }
 
-    const game = new Game(ctx, inputRef);
+    const game = new Game(ctx, inputRef, touchInput);
     gameRef.current = game;
     game.start();
     setRunning(true);
@@ -66,5 +69,5 @@ export function useGame() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setRunning]);
 
-  return { canvasRef, restart, pause, resume, togglePause };
+  return { canvasRef, updateTouch, restart, pause, resume, togglePause };
 }

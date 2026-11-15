@@ -1,37 +1,23 @@
-/**
- * drawRoom — renders the static and ambient structural elements of the bedroom:
- *   - wall with molding, subtle picture frame, and corner shadows
- *   - wood plank floor with grain highlights
- *   - window with animated twinkling night stars and moonbeam dust particles
- *   - bedside lamp soft warm glow
- *   - door with recess depth
- */
-
 import type { Room } from '../../types';
-import { box, vertGradFill } from './drawPrimitives';
+import { box } from './drawPrimitives';
 
 type Ctx = CanvasRenderingContext2D;
 
 const C = {
-  wallTop:      '#0d111e',
-  wallMid:      '#0a0e18',
-  floorBase:    '#111827',
-  floorPlank:   '#0e1422',
-  floorLight:   '#162032',
-  floorHighlight: 'rgba(255,255,255,0.015)',
-  baseboard:    '#1a2236',
-  baseboardEdge:'#223048',
-  windowFill:   '#080f20',
-  windowFrame:  '#1e2f4a',
-  windowDiv:    '#16233a',
-  moonbeam:     'rgba(165,195,255,0.06)',
-  doorFill:     '#0c1118',
-  doorFrame:    '#1a2438',
-  doorPanel:    '#111928',
-  doorKnob:     '#334766',
-  doorKnobHi:   '#4a658f',
-  wallCorner:   '#060910',
+  baseboard: '#393734',
+  baseboardEdge: '#55514b',
+  windowFill: '#0a1220',
+  windowFrame: '#39434d',
+  windowDiv: '#222c37',
+  doorFill: '#43362d',
+  doorFrame: '#221d1a',
+  doorPanel: '#635044',
+  doorKnob: '#8e7956',
+  doorKnobHi: '#cec19e',
+  wallCorner: '#171818',
 };
+
+const floorTextures = new WeakMap<Room, HTMLCanvasElement>();
 
 // Seeded dust particles in the moonbeam
 const DUST_PARTICLES = [
@@ -44,10 +30,8 @@ const DUST_PARTICLES = [
 ];
 
 export function drawRoom(ctx: Ctx, room: Room, timestamp: number = 0): void {
-  drawBackground(ctx, room.width, room.height);
-  drawWallDetails(ctx, room.width, room.height);
-  drawFloor(ctx, room.width, room.height);
-  drawBaseboard(ctx, room.width, room.height);
+  drawFloor(ctx, room);
+  drawTrim(ctx, room.width, room.height);
 
   // Structural objects from data
   for (const obj of room.objects) {
@@ -58,112 +42,92 @@ export function drawRoom(ctx: Ctx, room: Room, timestamp: number = 0): void {
       drawDoor(ctx, obj.bounds.x, obj.bounds.y, obj.bounds.w, obj.bounds.h);
     }
   }
-
-  // Soft ambient glows
-  drawAmbientGlows(ctx, room, timestamp);
-  drawWallCorners(ctx, room.width, room.height);
-  ctx.save();
-  ctx.font = 'bold 11px "Space Mono", monospace';
-  ctx.fillStyle = 'rgba(186, 230, 253, 0.55)';
-  ctx.textAlign = 'right';
-  const floor = room.floorType === 'carpet' ? 'CARPET · QUIET' : room.floorType === 'tile' ? 'TILE · LOUD' : 'WOOD · MEDIUM';
-  ctx.fillText(`${room.name ?? 'Bedroom'} · ${floor}`, room.width - 40, room.height - 36);
-  ctx.restore();
 }
 
-// ── Background (upper wall) ──────────────────────────────────────────────────
-
-function drawBackground(ctx: Ctx, W: number, H: number): void {
-  vertGradFill(ctx, 0, 0, W, H * 0.52, C.wallTop, C.wallMid);
+function drawFloor(ctx: Ctx, room: Room): void {
+  let texture = floorTextures.get(room);
+  if (!texture) {
+    texture = document.createElement('canvas');
+    texture.width = room.width;
+    texture.height = room.height;
+    const surface = texture.getContext('2d');
+    if (!surface) return;
+    paintFloor(surface, room);
+    floorTextures.set(room, texture);
+  }
+  ctx.drawImage(texture, 0, 0);
 }
 
-function drawWallDetails(ctx: Ctx, _W: number, _H: number): void {
-  // Subtle picture frame on the wall left of the window
-  const frameX = 140;
-  const frameY = 50;
-  const frameW = 60;
-  const frameH = 44;
+function paintFloor(ctx: Ctx, { width, height, floorType }: Room): void {
+  let seed = 1439;
+  function random(): number {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  }
 
-  box(ctx, frameX, frameY, frameW, frameH, '#141c2c', '#202d44', 1.5, 2);
-  // Painting canvas inside
-  ctx.fillStyle = '#0f1724';
-  ctx.fillRect(frameX + 4, frameY + 4, frameW - 8, frameH - 8);
+  const isTile = floorType === 'tile';
+  const isCarpet = floorType === 'carpet';
+  const rowHeight = isTile ? 66 : 25;
+  const boardWidth = isTile ? 66 : 150;
+  ctx.fillStyle = isTile ? '#242a2a' : '#29231f';
+  ctx.fillRect(0, 0, width, height);
 
-  // Stylized mountain & moon inside frame
-  ctx.fillStyle = '#1e2d48';
-  ctx.beginPath();
-  ctx.moveTo(frameX + 6, frameY + frameH - 4);
-  ctx.lineTo(frameX + frameW * 0.45, frameY + 16);
-  ctx.lineTo(frameX + frameW - 6, frameY + frameH - 4);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = '#f8fafc';
-  ctx.beginPath();
-  ctx.arc(frameX + frameW * 0.72, frameY + 14, 3.5, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-// ── Floor ────────────────────────────────────────────────────────────────────
-
-function drawFloor(ctx: Ctx, W: number, H: number): void {
-  const floorY = H * 0.50;
-  const floorH = H - floorY;
-
-  vertGradFill(ctx, 0, floorY, W, floorH, C.floorBase, '#0c121e');
-
-  // Wood planks
-  const plankCount = 9;
-  const plankH = floorH / plankCount;
-
-  for (let i = 0; i <= plankCount; i++) {
-    const y = floorY + i * plankH;
-
-    // Plank seam shadow
-    ctx.strokeStyle = C.floorPlank;
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(W, y);
-    ctx.stroke();
-
-    // Plank top subtle highlight
-    if (i < plankCount) {
-      ctx.strokeStyle = C.floorHighlight;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, y + 1);
-      ctx.lineTo(W, y + 1);
-      ctx.stroke();
+  if (isCarpet) {
+    ctx.fillStyle = '#353735';
+    ctx.fillRect(0, 0, width, height);
+  } else {
+    for (let row = 0; row * rowHeight < height; row++) {
+      const y = row * rowHeight;
+      const stagger = isTile ? 0 : (row * 53) % boardWidth;
+      for (let x = -stagger; x < width; x += boardWidth) {
+        const shade = Math.floor(random() * 17);
+        ctx.fillStyle = isTile
+          ? `rgb(${63 + shade}, ${69 + shade}, ${69 + shade})`
+          : `rgb(${64 + shade}, ${48 + shade}, ${40 + shade})`;
+        ctx.fillRect(x + 1, y + 1, boardWidth - 1, rowHeight - 1);
+        ctx.fillStyle = 'rgba(235, 221, 198, 0.1)';
+        ctx.fillRect(x + 1, y + 1, boardWidth - 1, 1);
+      }
     }
   }
 
-  // Staggered vertical plank joints
-  ctx.strokeStyle = C.floorLight;
-  ctx.lineWidth = 0.5;
-  const joints = [120, 280, 440, 600, 760, 890];
-  for (const jx of joints) {
-    for (let row = 0; row < plankCount; row++) {
-      const offsetX = row % 2 === 0 ? 0 : 75;
-      const jy = floorY + row * plankH;
-      ctx.beginPath();
-      ctx.moveTo(jx + offsetX, jy);
-      ctx.lineTo(jx + offsetX, jy + plankH);
-      ctx.stroke();
-    }
+  for (let i = 0; i < 17000; i++) {
+    const x = random() * width;
+    const y = random() * height;
+    const length = !isTile && !isCarpet ? 2 + random() * 38 : 0.5 + random() * 2;
+    ctx.fillStyle = i % 2 ? 'rgba(230, 220, 202, 0.07)' : 'rgba(12, 15, 18, 0.13)';
+    ctx.fillRect(x, y, length, isCarpet ? 1.2 : 0.7);
   }
 }
 
-// ── Baseboard ────────────────────────────────────────────────────────────────
+function drawTrim(ctx: Ctx, width: number, height: number): void {
+  ctx.strokeStyle = C.baseboard;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(0, 0, width, height);
+  ctx.strokeStyle = C.baseboardEdge;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(2.5, 2.5, width - 5, height - 5);
+}
 
-function drawBaseboard(ctx: Ctx, W: number, H: number): void {
-  const boardY = H * 0.50;
-  // Main trim
-  ctx.fillStyle = C.baseboard;
-  ctx.fillRect(0, boardY - 8, W, 8);
-  // Edge highlight
-  ctx.fillStyle = C.baseboardEdge;
-  ctx.fillRect(0, boardY - 9, W, 1);
+export function drawRoomLighting(ctx: Ctx, room: Room): void {
+  const { width, height } = room;
+  const vignette = ctx.createRadialGradient(width * 0.52, height * 0.45, 95, width * 0.52, height * 0.45, width * 0.58);
+  vignette.addColorStop(0, 'rgba(18, 28, 48, 0.04)');
+  vignette.addColorStop(1, 'rgba(5, 9, 16, 0.55)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, width, height);
+
+  const table = room.objects.find(({ kind }) => kind === 'nightstand');
+  if (!table) return;
+  const { x, y, w, h } = table.bounds;
+  const lampX = x + w / 2;
+  const lampY = y + h / 2;
+  const light = ctx.createRadialGradient(lampX, lampY, 4, lampX, lampY, 92);
+  light.addColorStop(0, 'rgba(248, 185, 108, 0.29)');
+  light.addColorStop(0.35, 'rgba(248, 185, 108, 0.13)');
+  light.addColorStop(1, 'rgba(248, 185, 108, 0)');
+  ctx.fillStyle = light;
+  ctx.fillRect(lampX - 92, lampY - 92, 184, 184);
 }
 
 // ── Window & Moonbeam ────────────────────────────────────────────────────────
@@ -238,7 +202,7 @@ function drawMoonbeam(
   timestamp: number,
 ): void {
   const cx = wx + ww / 2;
-  const spread = 240;
+  const spread = 170;
   const topY = 0;
 
   const grad = ctx.createLinearGradient(cx, topY, cx, canvasH);
@@ -312,27 +276,4 @@ function drawDoor(ctx: Ctx, x: number, y: number, w: number, h: number): void {
   ctx.moveTo(x, y);
   ctx.lineTo(x + w, y);
   ctx.stroke();
-}
-
-// ── Soft Ambient Glows (Lamp / Screen) ────────────────────────────────────────
-
-function drawAmbientGlows(ctx: Ctx, room: Room, _timestamp: number): void {
-  const nightstand = room.objects.find((o) => o.id === 'nightstand');
-  if (nightstand) {
-    const lampX = nightstand.bounds.x + nightstand.bounds.w * 0.5;
-    const lampY = nightstand.bounds.y - 20;
-
-    // Very subtle warm glow around lamp
-    const lampGlow = ctx.createRadialGradient(lampX, lampY, 2, lampX, lampY, 65);
-    lampGlow.addColorStop(0, 'rgba(251, 191, 36, 0.045)');
-    lampGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = lampGlow;
-    ctx.fillRect(lampX - 65, lampY - 65, 130, 130);
-  }
-}
-
-function drawWallCorners(ctx: Ctx, W: number, _H: number): void {
-  ctx.fillStyle = C.wallCorner;
-  ctx.fillRect(0, 0, 28, 28);
-  ctx.fillRect(W - 28, 0, 28, 28);
 }

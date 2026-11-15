@@ -71,9 +71,17 @@ export interface PlayerState {
   vy: number;
   facing: Direction;
   moving: boolean;
+  sneaking?: boolean;
 }
 
 // ─── Input ───────────────────────────────────────────────────────────────────
+
+export interface TouchInput {
+  directions: Set<Direction>;
+  sneak: boolean;
+  interact: boolean;
+  distract: boolean;
+}
 
 export interface InputState {
   up:       boolean;
@@ -83,6 +91,7 @@ export interface InputState {
   interact: boolean;
   distract: boolean;
   pause:    boolean;
+  sneak?: boolean;
 }
 
 // ─── Noise & Wake System Types ───────────────────────────────────────────────
@@ -189,6 +198,13 @@ export interface Mission {
 
 // ─── Animation & Render helpers ──────────────────────────────────────────────
 
+export interface DistractionThrow {
+  origin: Vec2;
+  landing: Vec2;
+  elapsed: number;
+  duration: number;
+}
+
 export interface RenderState {
   timestamp: number;
   player: PlayerState;
@@ -197,6 +213,7 @@ export interface RenderState {
   activePrompt?: string | null;
   nearbyInteractable?: Interactable | null;
   interactionEffects?: InteractionEffect[];
+  distraction?: DistractionThrow | null;
   gameStatus?: GameStatus;
   currentMission?: Mission | null;
 }
