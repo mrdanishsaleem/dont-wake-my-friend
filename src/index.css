@@ -283,7 +283,8 @@ body {
 .game-stage { min-width: 0; }
 .touch-controls { display: none; }
 
-@media (max-width: 640px), (any-pointer: coarse) {
+@media (max-width: 640px), (any-pointer: coarse),
+       (max-width: 900px) and (orientation: landscape) and (max-height: 540px) {
   .app-wrapper { justify-content: flex-start; padding: 0.85rem 0.65rem; }
   .game-header { gap: 0.55rem 0.8rem; margin-bottom: 0.65rem; }
   .game-toolbar button { min-height: 44px; }
@@ -321,7 +322,8 @@ body {
   .touch-controls:disabled { opacity: 0.6; }
 }
 
-@media (any-pointer: coarse) and (orientation: landscape) and (max-height: 540px) {
+@media (max-width: 900px) and (orientation: landscape) and (max-height: 540px),
+       (any-pointer: coarse) and (orientation: landscape) and (max-height: 540px) {
   .game-main { grid-template-columns: minmax(0, 1fr); }
   .game-stage { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.65rem; }
   .game-stage .canvas-wrapper { max-width: calc((100dvh - 76px) * 16 / 9); margin-inline: auto; }
