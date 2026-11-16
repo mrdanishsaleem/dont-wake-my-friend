@@ -21,22 +21,22 @@ Move close enough for the interaction prompt to appear, then interact to complet
 
 Choose Easy, Normal, or Hard using the difficulty selector. Successful runs earn a stealth score based on time, peak wake level, total noise, and distance from your friend at completion. Personal records are saved in the current browser.
 
-| Action | Keyboard | Touch |
-| --- | --- | --- |
-| Move | W A S D or arrow keys | Directional pad |
-| Sneak | Hold Shift while moving | Hold **Hold to sneak** while moving |
-| Interact | E | **Interact** |
-| Toss a coin | F | **Toss coin** |
-| Pause or resume | Esc | **Pause** or **Resume** |
+| Action          | Keyboard                | Touch                               |
+| --------------- | ----------------------- | ----------------------------------- |
+| Move            | W A S D or arrow keys   | Directional pad                     |
+| Sneak           | Hold Shift while moving | Hold **Hold to sneak** while moving |
+| Interact        | E                       | **Interact**                        |
+| Toss a coin     | F                       | **Toss coin**                       |
+| Pause or resume | Esc                     | **Pause** or **Resume**             |
 
 ## Development
 
 The game uses React, TypeScript, and Vite, with an HTML canvas for the playfield, Zustand for shared state, and Web Audio for sound effects.
 
-| Command | Purpose |
-| --- | --- |
-| `npm run lint` | Run Oxlint |
-| `npm run build` | Type-check and build the game into `dist/` |
+| Command           | Purpose                                           |
+| ----------------- | ------------------------------------------------- |
+| `npm run lint`    | Run Oxlint                                        |
+| `npm run build`   | Type-check and build the game into `dist/`        |
 | `npm run preview` | Serve the production build locally after building |
 
 Room layouts and missions are in [`src/data`](src/data). The game loop, audio, and rendering are in [`src/game`](src/game). The HUD, dialogs, and touch controls are in [`src/components`](src/components).
